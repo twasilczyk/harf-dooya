@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Dooya RF blinds</title>
+  <g fill="#008baf">
+    <rect x="32" y="40" width="144" height="24" rx="8"/>
+    <rect x="40" y="76" width="128" height="16" rx="4"/>
+    <rect x="40" y="104" width="128" height="16" rx="4"/>
+    <rect x="40" y="132" width="128" height="16" rx="4"/>
+    <rect x="40" y="160" width="128" height="16" rx="4"/>
+    <rect x="40" y="188" width="128" height="16" rx="4"/>
+  </g>
+  <g fill="none" stroke="#008baf" stroke-width="10" stroke-linecap="round">
+    <path d="M192 92 Q212 116 192 140"/>
+    <path d="M208 72 Q244 116 208 160"/>
+  </g>
+</svg>

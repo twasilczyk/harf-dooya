@@ -1,0 +1,13 @@
+{
+  "domain": "harf_dooya",
+  "name": "Dooya RF",
+  "codeowners": ["@twasilczyk"],
+  "config_flow": true,
+  "dependencies": ["radio_frequency"],
+  "documentation": "https://github.com/twasilczyk/harf-dooya",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/twasilczyk/harf-dooya/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

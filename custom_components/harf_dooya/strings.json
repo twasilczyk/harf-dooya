@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a Dooya remote",
+        "description": "Select a 433.92 MHz RF transmitter and enter the ID of a remote already paired with your blinds. One cover will be created for each channel, starting at channel 1.",
+        "data": {
+          "transmitter": "RF transmitter",
+          "remote_id": "Remote ID",
+          "channels": "Number of channels"
+        },
+        "data_description": {
+          "remote_id": "Decimal or hexadecimal with a 0x prefix (for example, 0x00123C14).",
+          "channels": "Numbered channels on the remote (1–255)."
+        }
+      }
+    },
+    "error": {
+      "invalid_remote_id": "Enter a remote ID between 0 and 16777215, in decimal or hexadecimal with a 0x prefix.",
+      "invalid_channels": "Enter a whole number of channels between 1 and 255.",
+      "invalid_transmitter": "Select a compatible 433.92 MHz OOK transmitter."
+    },
+    "abort": {
+      "already_configured": "This remote is already configured.",
+      "no_transmitters": "Add an RF transmitter to Home Assistant before setting up Dooya RF.",
+      "no_compatible_transmitters": "No RF transmitter supports 433.92 MHz with OOK modulation."
+    }
+  }
+}

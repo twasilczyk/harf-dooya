@@ -1,0 +1,65 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: home-assistant/actions/hassfest@master
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ">=3.14.2 <3.15"
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+      - name: Check release tag matches integration version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(Path("custom_components/harf_dooya/manifest.json").read_text())
+          expected = f"v{manifest['version']}"
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != expected:
+              raise SystemExit(f"Release tag {tag!r} must match manifest version: {expected}")
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Run tests
+        run: python -m pytest -q
