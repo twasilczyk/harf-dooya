@@ -32,6 +32,9 @@ async def test_channels_and_commands(
             "cover", "harf_dooya", f"123c14_{channel}"
         )
         assert entity_id is not None
+        cover = hass.data[DATA_COMPONENT].get_entity(entity_id)
+        # Newer RF helpers require a resolved entity ID for availability tracking.
+        assert cover._rf_transmitter_entity_id == transmitter.entity_id
         state = hass.states.get(entity_id)
         assert state is not None
         assert state.state == STATE_UNKNOWN
@@ -106,6 +109,16 @@ async def test_transmitter_availability_rename_and_unload(
         "cover", "open_cover", {"entity_id": covers[0]}, blocking=True
     )
     assert len(transmitter.commands) == 1
+
+    # A second rename checks that reloading also renews the registry listener.
+    er.async_get(hass).async_update_entity(
+        transmitter.entity_id, new_entity_id="radio_frequency.renamed_again"
+    )
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        "cover", "close_cover", {"entity_id": covers[0]}, blocking=True
+    )
+    assert len(transmitter.commands) == 2
     assert await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
     assert all(
@@ -113,6 +126,14 @@ async def test_transmitter_availability_rename_and_unload(
     )
     assert all(
         hass.states.get(entity_id).state == STATE_UNAVAILABLE for entity_id in covers
+    )
+
+    er.async_get(hass).async_update_entity(
+        transmitter.entity_id, new_entity_id="radio_frequency.renamed_after_unload"
+    )
+    await hass.async_block_till_done()
+    assert all(
+        hass.data[DATA_COMPONENT].get_entity(entity_id) is None for entity_id in covers
     )
 
     # State changes after unloading must not recreate covers or retain listeners.

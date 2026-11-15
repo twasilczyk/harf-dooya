@@ -75,7 +75,8 @@ The transmitter selection follows
 [`Aetf/hass-proflame`](https://github.com/Aetf/hass-proflame).
 Home Assistant's
 [`radio_frequency` consumer helper](https://github.com/home-assistant/core/blob/2026.9.2/homeassistant/components/radio_frequency/helpers.py)
-handles transmission, availability and transmitter renames. No additional
+handles transmission and availability. The integration resolves the transmitter's
+registry UUID and reloads its covers when the transmitter is renamed. No additional
 protocol package or ESPHome cover configuration is required.
 
 ## Development
