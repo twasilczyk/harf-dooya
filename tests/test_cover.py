@@ -2,14 +2,43 @@
 
 import pytest
 from homeassistant.components.cover import DATA_COMPONENT, CoverEntityFeature
+from homeassistant.components.radio_frequency.helpers import async_send_command
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from rf_protocols.commands.ook import OOKCommand
 
 from .conftest import RecordingTransmitter
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_other_ook_transmissions_unchanged(
+    hass: HomeAssistant,
+    transmitter: RecordingTransmitter,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Sending Dooya on a shared radio does not adjust another raw protocol."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    other = OOKCommand(
+        frequency=433_920_000, timings=[1000, -500, 250, -10_000], repeat_count=4
+    )
+    await async_send_command(hass, transmitter.entity_id, other)
+    await hass.services.async_call(
+        "cover",
+        "stop_cover",
+        {"entity_id": hass.states.async_entity_ids("cover")[0]},
+        blocking=True,
+    )
+    await async_send_command(hass, transmitter.entity_id, other)
+    assert transmitter.commands[0] is other
+    assert transmitter.commands[2] is other
+    assert other.get_raw_timings() == [1000, -500, 250, -10_000]
+    assert other.frequency == 433_920_000
+    assert other.repeat_count == 4
+    assert transmitter.commands[1].get_raw_timings()[:2] == [4672, -1508]
 
 
 async def test_channels_and_commands(
@@ -56,13 +85,13 @@ async def test_channels_and_commands(
             command = transmitter.commands[-1]
             timings = command.get_raw_timings()
             assert len(timings) == 82
-            assert timings[:2] == [5000, -1500]
-            bits = "".join("1" if mark == 750 else "0" for mark in timings[2::2])
+            assert timings[:2] == [4672, -1508]
+            bits = "".join("1" if mark == 680 else "0" for mark in timings[2::2])
             payload = int(bits, 2).to_bytes(5, "big")
             assert payload == bytes((0x12, 0x3C, 0x14, channel, button * 0x11))
-            assert command.frequency == 433_920_000
+            assert command.frequency == 433_934_000
             assert command.repeat_count == 2
-            assert timings[-1] == -25_350
+            assert timings[-1] == -8144
 
         # Sending a command cannot tell us the blind's actual position.
         assert hass.states.get(entity_id).state == STATE_UNKNOWN

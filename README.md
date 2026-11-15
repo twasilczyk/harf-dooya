@@ -15,7 +15,7 @@ Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
 
 - Home Assistant **2026.9.2 or newer**. This is the minimum tested version.
 - An RF transmitter already added to Home Assistant, exposing a
-  `radio_frequency` entity supporting **433.92 MHz OOK**. A `remote` entity alone
+  `radio_frequency` entity supporting **433.934 MHz OOK**. A `remote` entity alone
   does not provide this API.
 - The ID and channel count of a remote already paired with your blinds.
 
@@ -69,7 +69,18 @@ The encoder follows OpenHarf's
 [`dooya_protocol.cpp`](https://github.com/twasilczyk/openharf/blob/main/firmware/components/remote_base/dooya_protocol.cpp):
 24-bit remote ID, 8-bit channel, and two identical 4-bit button/check values.
 Open uses `1`, close `3`, and stop `5`. Each command is sent three times, with
-ESPHome's default 25 ms repeat gap included in the raw timings.
+an 8,144 µs silent interval measured from the final RF falling edge to the next
+sync rising edge. Programmed timings fitted to the OEM envelope are sync 4,672/1,508 µs,
+zero 328/748 µs, and one 680/396 µs (HIGH/LOW). The bit period is 1,076 µs.
+Open, Close, and Stop have a 56.968 ms frame start interval.
+
+The carrier defaults to **433.934 MHz**, including for existing entries. Use the
+integration’s **Configure** action to set a different carrier frequency in Hz for
+each remote. The selected transmitter must support that frequency. Saving reloads
+the covers; it does not alter the radio’s crystal calibration or other protocols.
+
+See [RF transmission details](docs/rf-transmission.md) for the transmission path,
+CC1101 register calculation, and repeat timing.
 
 The transmitter selection follows
 [`Aetf/hass-proflame`](https://github.com/Aetf/hass-proflame).

@@ -7,13 +7,21 @@ from homeassistant.components.radio_frequency import (
     ModulationType,
     async_get_transmitters,
 )
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+    OptionsFlowWithReload,
+)
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
     CONF_CHANNELS,
+    CONF_FREQUENCY,
     CONF_REMOTE_ID,
     CONF_TRANSMITTER,
     DOMAIN,
@@ -27,6 +35,12 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Configure the transmitter and an existing remote ID."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Allow each remote to select its own carrier frequency."""
+        return DooyaOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -98,6 +112,69 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(
             step_id="user",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
+        )
+
+
+class DooyaOptionsFlow(OptionsFlowWithReload):
+    """Adjust the carrier without changing the radio's calibration."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Validate the requested frequency against the selected transmitter."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            frequency = user_input[CONF_FREQUENCY]
+            if (
+                isinstance(frequency, bool)
+                or not isinstance(frequency, (int, float))
+                or not 1 <= frequency <= 0xFFFFFFFF
+                or int(frequency) != frequency
+            ):
+                errors[CONF_FREQUENCY] = "invalid_frequency"
+            else:
+                transmitter_id = er.async_resolve_entity_id(
+                    er.async_get(self.hass), self.config_entry.data[CONF_TRANSMITTER]
+                )
+                try:
+                    transmitters = async_get_transmitters(
+                        self.hass, int(frequency), ModulationType.OOK
+                    )
+                except HomeAssistantError:
+                    transmitters = []
+                if transmitter_id not in transmitters:
+                    errors[CONF_FREQUENCY] = "unsupported_frequency"
+                else:
+                    return self.async_create_entry(
+                        title="",
+                        data={
+                            **self.config_entry.options,
+                            CONF_FREQUENCY: int(frequency),
+                        },
+                    )
+
+        frequency = self.config_entry.options.get(
+            CONF_FREQUENCY, self.config_entry.data.get(CONF_FREQUENCY, FREQUENCY)
+        )
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_FREQUENCY, default=frequency
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=0xFFFFFFFF,
+                        step=1,
+                        unit_of_measurement="Hz",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )

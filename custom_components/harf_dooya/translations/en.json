@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Add a Dooya remote",
-        "description": "Select a 433.92 MHz RF transmitter and enter the ID of a remote already paired with your blinds. One cover will be created for each channel, starting at channel 1.",
+        "description": "Select a 433.934 MHz RF transmitter and enter the ID of a remote already paired with your blinds. One cover will be created for each channel, starting at channel 1.",
         "data": {
           "transmitter": "RF transmitter",
           "remote_id": "Remote ID",
@@ -18,12 +18,30 @@
     "error": {
       "invalid_remote_id": "Enter a remote ID between 0 and 16777215, in decimal or hexadecimal with a 0x prefix.",
       "invalid_channels": "Enter a whole number of channels between 1 and 255.",
-      "invalid_transmitter": "Select a compatible 433.92 MHz OOK transmitter."
+      "invalid_transmitter": "Select a compatible 433.934 MHz OOK transmitter."
     },
     "abort": {
       "already_configured": "This remote is already configured.",
       "no_transmitters": "Add an RF transmitter to Home Assistant before setting up Dooya RF.",
-      "no_compatible_transmitters": "No RF transmitter supports 433.92 MHz with OOK modulation."
+      "no_compatible_transmitters": "No RF transmitter supports 433.934 MHz with OOK modulation."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dooya carrier frequency",
+        "description": "Requested RF frequency for this remote. OpenHARF applies the radio’s existing crystal calibration.",
+        "data": {
+          "frequency": "Carrier frequency"
+        },
+        "data_description": {
+          "frequency": "Frequency in Hz; default 433934000 (433.934 MHz)."
+        }
+      }
+    },
+    "error": {
+      "invalid_frequency": "Enter a whole-number frequency in Hz between 1 and 4294967295.",
+      "unsupported_frequency": "The selected transmitter does not support this frequency with OOK modulation, or is no longer available."
     }
   }
 }

@@ -4,8 +4,9 @@ DOMAIN = "harf_dooya"
 CONF_TRANSMITTER = "transmitter"
 CONF_REMOTE_ID = "remote_id"
 CONF_CHANNELS = "channels"
+CONF_FREQUENCY = "frequency"
 
-FREQUENCY = 433_920_000
+FREQUENCY = 433_934_000
 MAX_REMOTE_ID = 0xFFFFFF
 MAX_CHANNELS = 255
 

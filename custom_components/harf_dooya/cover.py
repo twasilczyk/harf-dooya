@@ -22,9 +22,11 @@ from .const import (
     BUTTON_OPEN,
     BUTTON_STOP,
     CONF_CHANNELS,
+    CONF_FREQUENCY,
     CONF_REMOTE_ID,
     CONF_TRANSMITTER,
     DOMAIN,
+    FREQUENCY,
 )
 from .protocol import make_command
 
@@ -76,6 +78,9 @@ class DooyaCover(RadioFrequencyTransmitterConsumerEntity, CoverEntity):
         """Bind the cover to its remote, channel and RF transmitter."""
         self._remote_id = entry.data[CONF_REMOTE_ID]
         self._channel = channel
+        self._frequency = entry.options.get(
+            CONF_FREQUENCY, entry.data.get(CONF_FREQUENCY, FREQUENCY)
+        )
         self._rf_transmitter_entity_id = transmitter_entity_id
         # Home Assistant 2026.9 uses the UUID-based consumer helper.
         self._rf_transmitter_entity_id_or_uuid = entry.data[CONF_TRANSMITTER]
@@ -91,17 +96,17 @@ class DooyaCover(RadioFrequencyTransmitterConsumerEntity, CoverEntity):
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the blind."""
         await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_OPEN)
+            make_command(self._remote_id, self._channel, BUTTON_OPEN, self._frequency)
         )
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the blind."""
         await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_CLOSE)
+            make_command(self._remote_id, self._channel, BUTTON_CLOSE, self._frequency)
         )
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the blind."""
         await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_STOP)
+            make_command(self._remote_id, self._channel, BUTTON_STOP, self._frequency)
         )
