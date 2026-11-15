@@ -51,7 +51,11 @@ async def test_channels_and_commands(
     await hass.async_block_till_done()
 
     registry = er.async_get(hass)
-    covers = er.async_entries_for_config_entry(registry, config_entry.entry_id)
+    covers = [
+        entity
+        for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id)
+        if entity.domain == "cover"
+    ]
     assert len(covers) == 3
     assert len({cover.device_id for cover in covers}) == 1
     assert {cover.unique_id for cover in covers} == {"123c14_1", "123c14_2", "123c14_3"}

@@ -2,7 +2,11 @@
 
 import pytest
 
-from custom_components.harf_dooya.protocol import encode_timings, make_command
+from custom_components.harf_dooya.protocol import (
+    encode_timings,
+    make_command,
+    make_programming_command,
+)
 
 
 @pytest.mark.parametrize("button", [1, 3, 5])
@@ -70,3 +74,27 @@ def test_falling_edge_changes_preserve_all_rising_edges(button: int) -> None:
         old_elapsed += abs(old)
         new_elapsed += abs(new)
     assert new_elapsed == old_elapsed
+
+
+def test_programming_frames() -> None:
+    """P2 keeps the existing symbols and sends 0xCC four times at 57.3 ms."""
+    command = make_programming_command(0x123C14, 1, 433_921_000)
+    assert command.frequency == 433_921_000
+    assert command.modulation == "OOK"
+    assert command.repeat_count == 3
+    timings = command.get_raw_timings()
+    assert len(timings) == 82
+    assert timings[:-1] == encode_timings(0x123C14, 1, 0xC)[:-1]
+    assert timings[-1] == -8828
+    assert sum(map(abs, timings)) == 57_300
+    sequence = timings * (command.repeat_count + 1)
+    starts = []
+    elapsed = 0
+    for offset in range(0, len(sequence), 82):
+        frame = sequence[offset : offset + 82]
+        starts.append(elapsed)
+        assert frame == timings
+        bits = "".join("1" if mark == 680 else "0" for mark in frame[2::2])
+        assert int(bits, 2).to_bytes(5, "big") == bytes.fromhex("12 3C 14 01 CC")
+        elapsed += sum(map(abs, frame))
+    assert starts == [0, 57_300, 114_600, 171_900]

@@ -53,6 +53,11 @@ the remote's device. Channels run from 1 to the configured count (maximum 255).
 Channel 0, the remote's broadcast channel, is not included in that count. You can
 use a Home Assistant cover group to control several of these covers together.
 
+The device's **Configuration** section also provides one **P2 (Programming)**
+button for the whole remote, using channel 1. Both physical P2 keys use the same
+command, so only one P2 entity is exposed. It uses that remote's configured RF frequency
+and sends `0xCC` four times, with 57.3 ms between frame starts.
+
 The integration does not receive signals or learn remote IDs yet. The remote
 must already be paired with the blinds. There is no position feedback or travel
 timer: state stays unknown and both direction controls remain available, as with

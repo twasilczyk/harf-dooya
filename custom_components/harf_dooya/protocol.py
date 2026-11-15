@@ -2,7 +2,7 @@
 
 from rf_protocols.commands.ook import OOKCommand
 
-from .const import FREQUENCY, MAX_CHANNELS, MAX_REMOTE_ID
+from .const import BUTTON_PROGRAM, FREQUENCY, MAX_CHANNELS, MAX_REMOTE_ID
 
 # Capture-derived envelope widths, not a global radio/RMT delay correction.
 SYNC_PERIOD_US = 6180
@@ -18,6 +18,8 @@ BIT_ONE_LOW_US = BIT_PERIOD_US - BIT_ONE_HIGH_US
 INTER_FRAME_GAP_US = 8144
 INTER_FRAME_GAP_ZERO_US = 8146
 FRAME_COUNT = 3
+PROGRAM_FRAME_COUNT = 4
+PROGRAM_FRAME_INTERVAL_US = 57_300
 
 
 def encode_timings(remote_id: int, channel: int, button: int) -> list[int]:
@@ -49,4 +51,16 @@ def make_command(
     timings[-1] = -(INTER_FRAME_GAP_US if button & 1 else INTER_FRAME_GAP_ZERO_US)
     return OOKCommand(
         frequency=frequency, timings=timings, repeat_count=FRAME_COUNT - 1
+    )
+
+
+def make_programming_command(
+    remote_id: int, channel: int, frequency: int = FREQUENCY
+) -> OOKCommand:
+    """Send P2 (0xCC) four times, with 57.3 ms between frame starts."""
+    timings = encode_timings(remote_id, channel, BUTTON_PROGRAM)
+    # Replace the final LOW so it completes the requested start-to-start period.
+    timings[-1] = -(PROGRAM_FRAME_INTERVAL_US - sum(abs(t) for t in timings[:-1]))
+    return OOKCommand(
+        frequency=frequency, timings=timings, repeat_count=PROGRAM_FRAME_COUNT - 1
     )

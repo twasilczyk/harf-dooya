@@ -5,6 +5,16 @@ all commands. The payload remains a 24-bit remote ID, 8-bit channel, and two
 identical command nibbles. Open = 1, Close = 3, Stop = 5. For remote 0x123C14,
 channel 1, Stop is `12 3C 14 01 55`.
 
+P2 programming uses nibble `0xC` twice, giving `12 3C 14 01 CC` for the same
+remote and channel. The remote has one configuration button on the existing
+device, using channel 1 and sharing the covers' transmitter and frequency settings. Both physical
+P2 keys map to this single command.
+
+`make_programming_command` uses the same sync and bit timings but requests four
+frames (`repeat_count=3` additional repeats). It replaces the last LOW with
+8,828 µs, producing a 57,300 µs frame start interval. Open, Close and Stop retain
+their existing three-frame sequence and 56,968 µs interval.
+
 ## Requested waveform
 
 | Constant | Microseconds |
