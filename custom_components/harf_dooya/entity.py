@@ -8,7 +8,14 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from rf_protocols.commands.ook import OOKCommand
 
-from .const import CONF_FREQUENCY, CONF_REMOTE_ID, CONF_TRANSMITTER, DOMAIN, FREQUENCY
+from .const import (
+    CONF_ENTITY_KEY,
+    CONF_FREQUENCY,
+    CONF_REMOTE_ID,
+    CONF_TRANSMITTER,
+    DOMAIN,
+    FREQUENCY,
+)
 
 
 class DooyaDeviceEntity(Entity):
@@ -19,9 +26,10 @@ class DooyaDeviceEntity(Entity):
 
     def __init__(self, entry: ConfigEntry) -> None:
         self._remote_id = entry.data[CONF_REMOTE_ID]
+        self._identity = entry.data.get(CONF_ENTITY_KEY, f"{self._remote_id:07x}")
         self._remote = entry.runtime_data
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{self._remote_id:06x}")},
+            identifiers={(DOMAIN, self._identity)},
             manufacturer="Dooya",
             model="RF remote",
             name=entry.title,

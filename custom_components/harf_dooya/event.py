@@ -26,7 +26,7 @@ class DooyaRemoteEvent(DooyaDeviceEntity, EventEntity):
 
     def __init__(self, entry: ConfigEntry) -> None:
         super().__init__(entry)
-        self._attr_unique_id = f"{self._remote_id:06x}_remote_action"
+        self._attr_unique_id = f"{self._identity}_remote_action"
 
     @property
     def available(self) -> bool:

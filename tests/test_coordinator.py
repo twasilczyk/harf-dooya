@@ -10,7 +10,7 @@ from custom_components.harf_dooya.protocol import make_command, make_programming
 from .test_decoder import remote_frame
 
 
-def make_remote(hass=None, remote_id=0x123C14):
+def make_remote(hass=None, remote_id=0x123C140):
     hass = hass or SimpleNamespace(data={})
     entry = SimpleNamespace(
         data={"remote_id": remote_id, "channels": 3, "transmitter": "radio-uuid"}
@@ -69,7 +69,7 @@ def test_serialization_echo_during_send_and_context_callback():
             remote.async_receive(remote_frame(command=1) * 3)
             remote.async_receive(remote_frame(command=5) * 3)
 
-        command = make_command(0x123C14, 1, 1)
+        command = make_command(0x123C140, 1, 1)
         programming = make_programming_command(123, 1)
         first = asyncio.create_task(remote.async_transmit(1, 1, command, send))
         await asyncio.sleep(0)

@@ -32,36 +32,38 @@
           "remote_id": "Remote ID"
         },
         "data_description": {
-          "remote_id": "Decimal or hexadecimal with a 0x prefix (for example, 0x00123C14)."
+          "remote_id": "Full 28-bit remote ID (7 hex digits): e.g. 0x4231157 for playroom, 0x123C140 for a zero-prefix remote."
         }
       },
       "finish": {
         "title": "Number of channels",
-        "description": "Enter the number of numbered channels on your remote. A received channel does not indicate how many channels exist. Channel 0 is broadcast and is excluded.",
+        "description": "Enter the number of numbered channels (1–15). Channel 0 is All blinds. The upper nibble of the former channel byte belongs to the remote ID.",
         "data": {
           "channels": "Number of channels"
         }
       },
       "reconfigure": {
-        "title": "Change RF transmitter or receiver",
-        "description": "Keep the remote identity, entities and frequency setting while changing its radios. Choosing a receiver here does not learn a different remote.",
+        "title": "Change remote ID or RF radios",
+        "description": "Correct the 28-bit remote ID, including its high nibble, or change radios. Existing entity IDs and frequency settings are preserved.",
         "data": {
           "transmitter": "RF transmitter",
-          "receiver": "RF receiver"
+          "receiver": "RF receiver",
+          "remote_id": "28-bit remote ID"
         }
       }
     },
     "error": {
-      "invalid_remote_id": "Enter a remote ID between 0 and 16777215, in decimal or hexadecimal with a 0x prefix.",
-      "invalid_channels": "Enter a whole number of channels between 1 and 255.",
+      "invalid_remote_id": "Enter a 28-bit remote ID between 0 and 268435455, decimal or hexadecimal with a 0x prefix (e.g. 0x4231157).",
+      "invalid_channels": "Enter a whole number of channels between 1 and 15.",
       "invalid_transmitter": "Select a compatible 433.934 MHz OOK transmitter.",
-      "receiver_unusable": "Select an available receiver or continue without a receiver."
+      "receiver_unusable": "Select an available receiver or continue without a receiver.",
+      "already_configured": "Another Dooya entry already uses this 28-bit remote ID."
     },
     "abort": {
       "already_configured": "This remote is already configured.",
       "no_transmitters": "Add an RF transmitter to Home Assistant before setting up Dooya RF.",
       "no_compatible_transmitters": "No RF transmitter supports 433.934 MHz with OOK modulation.",
-      "reconfigure_successful": "RF transmitter and receiver updated."
+      "reconfigure_successful": "Remote ID and radio settings updated."
     },
     "progress": {
       "listening": "Press Stop on the physical remote. Listening for repeated Dooya frames for up to 30 seconds. Nothing is transmitted while learning."

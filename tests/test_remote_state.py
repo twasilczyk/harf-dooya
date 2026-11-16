@@ -47,7 +47,7 @@ async def test_channel_event_unknown_position(
     state = hass.states.get(event)
     assert state.attributes["event_type"] == name
     assert state.attributes["channel"] == 2
-    assert state.attributes["remote_id"] == 0x123C14
+    assert state.attributes["remote_id"] == 0x123C140
     assert state.attributes["broadcast"] is False
     assert hass.states.get(covers[1]).attributes["last_command"] == name
     assert hass.states.get(covers[1]).attributes["last_command_origin"] == "remote"
@@ -185,7 +185,7 @@ async def test_missing_receiver_and_reconfigure_preserve_ids(
             e.entity_id
             for e in er.async_entries_for_config_entry(registry, config_entry.entry_id)
         }
-        assert config_entry.unique_id == "123c14"
+        assert config_entry.unique_id == "123c140"
         assert config_entry.options == {"frequency": 433_921_000}
     assert hass.states.get(covers[0]).state == STATE_UNKNOWN
     assert hass.states.get(event).state == STATE_UNAVAILABLE
@@ -199,7 +199,7 @@ async def test_platforms_and_remotes_share_transmitter_lock(
     other = MockConfigEntry(
         domain="harf_dooya",
         title="Other remote",
-        data={**config_entry.data, "remote_id": 123},
+        data={**{k: v for k, v in config_entry.data.items() if k != "entity_key"}, "remote_id": 123},
     )
     other.add_to_hass(hass)
     assert await hass.config_entries.async_setup(other.entry_id)

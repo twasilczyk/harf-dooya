@@ -47,7 +47,7 @@ async def emit(hass, receiver, timings):
 async def test_learning_split_and_cleanup(hass, transmitter, receiver, command):
     result = await start_learning(hass, transmitter, receiver)
     signal = SIGNAL_RX_FRAME.format(receiver.entry_id)
-    burst = remote_frame(channel=255, command=command) * 3
+    burst = remote_frame(channel=15, command=command) * 3
     await emit(hass, receiver, burst[:100])
     assert hass.config_entries.flow.async_get(result["flow_id"])["step_id"] == "learn"
     await emit(hass, receiver, burst[100:])
@@ -58,9 +58,9 @@ async def test_learning_split_and_cleanup(hass, transmitter, receiver, command):
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"channels": 3}
     )
-    assert result["data"]["remote_id"] == 0x123C14
+    assert result["data"]["remote_id"] == 0x123C140
     assert result["data"]["channels"] == 3
-    assert result["result"].unique_id == "123c14"
+    assert result["result"].unique_id == "123c140"
     await hass.async_block_till_done()
     assert transmitter.commands == []
     assert await hass.config_entries.async_unload(result["result"].entry_id)
@@ -88,7 +88,7 @@ async def test_timeout_retry_and_manual(hass, transmitter, receiver):
         result["flow_id"], {"receiver": "none"}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"remote_id": "1195028"}
+        result["flow_id"], {"remote_id": "19120448"}
     )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"channels": 1}
@@ -116,7 +116,7 @@ async def test_subscription_failure_and_fallback(hass, transmitter, receiver):
 
 
 async def test_duplicate_learned_remote(hass, transmitter, receiver, config_entry):
-    hass.config_entries.async_update_entry(config_entry, unique_id="123c14")
+    hass.config_entries.async_update_entry(config_entry, unique_id="123c140")
     result = await start_learning(hass, transmitter, receiver)
     await emit(hass, receiver, remote_frame() * 2)
     await hass.async_block_till_done(wait_background_tasks=True)

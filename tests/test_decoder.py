@@ -10,9 +10,9 @@ from custom_components.harf_dooya.protocol import (
 )
 
 
-def remote_frame(remote_id=0x123C14, channel=1, command=5, check=None):
+def remote_frame(remote_id=0x123C140, channel=1, command=5, check=None):
     word = (
-        (remote_id << 16)
+        (remote_id << 12)
         | (channel << 8)
         | (command << 4)
         | (command if check is None else check)
@@ -25,10 +25,10 @@ def remote_frame(remote_id=0x123C14, channel=1, command=5, check=None):
 
 
 @pytest.mark.parametrize("command", [1, 3, 5, 12, 7])
-@pytest.mark.parametrize("channel", [0, 1, 3, 255])
+@pytest.mark.parametrize("channel", [0, 1, 3, 15])
 def test_decode(command, channel):
     assert decode_frame(remote_frame(channel=channel, command=command)) == Frame(
-        0x123C14, channel, command
+        0x123C140, channel, command
     )
 
 
@@ -70,7 +70,7 @@ def test_split_and_concat(split):
     stream = FrameStream()
     result = stream.feed([120, -90] + data[:split], now=0)
     result += stream.feed(data[split:], now=0.05)
-    assert result == [Frame(0x123C14, 1, 5)]
+    assert result == [Frame(0x123C140, 1, 5)]
     assert len(stream._timings) <= MAX_BUFFERED_TIMINGS
 
 
@@ -78,9 +78,9 @@ def test_confirmation_dedup_and_new_press():
     s = FrameStream()
     assert not s.feed(remote_frame(), now=0)
     assert not s.feed(remote_frame(command=1), now=0.06)
-    assert s.feed(remote_frame(command=1), now=0.12) == [Frame(0x123C14, 1, 1)]
+    assert s.feed(remote_frame(command=1), now=0.12) == [Frame(0x123C140, 1, 1)]
     assert not s.feed(remote_frame(command=1) * 4, now=0.18)
-    assert s.feed(remote_frame(command=1) * 2, now=0.49) == [Frame(0x123C14, 1, 1)]
+    assert s.feed(remote_frame(command=1) * 2, now=0.49) == [Frame(0x123C140, 1, 1)]
 
 
 def test_malformed_breaks_confirmation_and_resync():
@@ -89,7 +89,7 @@ def test_malformed_breaks_confirmation_and_resync():
     bad = remote_frame()
     bad[9] = -9000
     assert not s.feed(bad + remote_frame(), now=0.05)
-    assert s.feed(remote_frame(), now=0.1) == [Frame(0x123C14, 1, 5)]
+    assert s.feed(remote_frame(), now=0.1) == [Frame(0x123C140, 1, 5)]
 
 
 def test_disconnect_stale_and_bounded():
@@ -107,7 +107,7 @@ def test_disconnect_stale_and_bounded():
 @pytest.mark.parametrize("tail", [20, 400, 1000, 1800, 8143, 8828])
 def test_absent_and_truncated_tail(tail):
     frame = remote_frame()
-    assert decode_frame(frame[:-1]) == Frame(0x123C14, 1, 5)
-    assert FrameStream().feed(frame[:-1] * 3) == [Frame(0x123C14, 1, 5)]
+    assert decode_frame(frame[:-1]) == Frame(0x123C140, 1, 5)
+    assert FrameStream().feed(frame[:-1] * 3) == [Frame(0x123C140, 1, 5)]
     frame[-1] = -tail
-    assert FrameStream().feed(frame * 2) == [Frame(0x123C14, 1, 5)]
+    assert FrameStream().feed(frame * 2) == [Frame(0x123C140, 1, 5)]

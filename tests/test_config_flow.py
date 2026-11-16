@@ -12,7 +12,7 @@ from .conftest import RecordingTransmitter
 pytestmark = pytest.mark.asyncio
 
 
-async def manual_flow(hass, transmitter, remote_id="0x123C14", channels=3):
+async def manual_flow(hass, transmitter, remote_id="0x123C140", channels=3):
     result = await hass.config_entries.flow.async_init(
         "harf_dooya", context={"source": SOURCE_USER}
     )
@@ -36,7 +36,8 @@ async def test_setup_and_duplicate_remote(hass, transmitter):
     result = await manual_flow(hass, transmitter)
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"] == {
-        "remote_id": 0x123C14,
+        "remote_id": 0x123C140,
+        "entity_key": "123c140",
         "channels": 3,
         "transmitter": er.async_get(hass).async_get(transmitter.entity_id).id,
     }
@@ -44,21 +45,26 @@ async def test_setup_and_duplicate_remote(hass, transmitter):
     assert len(hass.states.async_all("cover")) == 4
     assert len(hass.states.async_all("button")) == 1
     assert transmitter.commands == []
-    duplicate = await manual_flow(hass, transmitter, str(0x123C14))
+    duplicate = await manual_flow(hass, transmitter, str(0x123C140))
     assert duplicate["reason"] == "already_configured"
 
 
-@pytest.mark.parametrize("remote_id", ["not-a-remote", "0x1000000", "-1"])
+@pytest.mark.parametrize("remote_id", ["not-a-remote", "0x10000000", "-1"])
 async def test_invalid_remote_id(hass, transmitter, remote_id):
     result = await manual_flow(hass, transmitter, remote_id)
     assert result["errors"] == {"remote_id": "invalid_remote_id"}
     hass.config_entries.flow.async_abort(result["flow_id"])
 
 
-async def test_invalid_channels(hass, transmitter):
+async def test_invalid_fractional_channels(hass, transmitter):
     result = await manual_flow(hass, transmitter, channels=1.5)
     assert result["errors"] == {"channels": "invalid_channels"}
     hass.config_entries.flow.async_abort(result["flow_id"])
+
+
+async def test_channels_above_max(hass, transmitter):
+    with pytest.raises(InvalidData):
+        await manual_flow(hass, transmitter, channels=16)
 
 
 async def test_invalid_transmitter(hass, transmitter):

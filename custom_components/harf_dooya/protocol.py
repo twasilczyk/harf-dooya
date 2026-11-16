@@ -26,15 +26,15 @@ PROGRAM_FRAME_INTERVAL_US = 57_300
 
 
 def encode_timings(remote_id: int, channel: int, button: int) -> list[int]:
-    """Encode a 24-bit ID, 8-bit channel, button and matching check nibble."""
+    """Encode a 28-bit ID, 4-bit channel, button and matching check nibble."""
     if not 0 <= remote_id <= MAX_REMOTE_ID:
-        raise ValueError("Remote ID must fit in 24 bits")
+        raise ValueError("Remote ID must fit in 28 bits")
     if not 0 <= channel <= MAX_CHANNELS:
-        raise ValueError("Channel must fit in 8 bits")
+        raise ValueError("Channel must fit in 4 bits")
     if not 0 <= button <= 0xF:
         raise ValueError("Button must fit in 4 bits")
 
-    frame = (remote_id << 16) | (channel << 8) | (button << 4) | button
+    frame = (remote_id << 12) | (channel << 8) | (button << 4) | button
     timings = [SYNC_HIGH_US, -SYNC_LOW_US]
     for bit in range(39, -1, -1):
         timings.extend(
@@ -128,7 +128,7 @@ def decode_frame(timings: list[int]) -> Frame | None:
     command = word & 0xF
     if (word >> 4) & 0xF != command:
         return None
-    return Frame(word >> 16, (word >> 8) & 0xFF, command)
+    return Frame(word >> 12, (word >> 8) & 0xF, command)
 
 
 class FrameStream:

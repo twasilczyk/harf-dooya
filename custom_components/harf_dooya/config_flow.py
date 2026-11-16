@@ -23,6 +23,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_CHANNELS,
+    CONF_ENTITY_KEY,
     CONF_FREQUENCY,
     CONF_LEARN,
     CONF_RECEIVER,
@@ -44,7 +45,7 @@ _LOGGER = logging.getLogger(__name__)
 class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Learn an address without changing existing entry or entity identities."""
 
-    VERSION = 1
+    VERSION = 2
 
     @staticmethod
     @callback
@@ -236,7 +237,14 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         assert self._remote_id is not None
-        await self.async_set_unique_id(f"{self._remote_id:06x}")
+        # Detect duplicates even when a legacy v1 entry has not loaded yet.
+        if any(
+            other.version == 1
+            and other.data[CONF_REMOTE_ID] << 4 == self._remote_id
+            for other in self.hass.config_entries.async_entries(DOMAIN)
+        ):
+            return self.async_abort(reason="already_configured")
+        await self.async_set_unique_id(f"{self._remote_id:07x}")
         self._abort_if_unique_id_configured()
         errors = {}
         if user_input is None:
@@ -251,13 +259,14 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
             return self._channel_form({CONF_CHANNELS: "invalid_channels"})
         data = {
             CONF_REMOTE_ID: self._remote_id,
+            CONF_ENTITY_KEY: f"{self._remote_id:07x}",
             CONF_TRANSMITTER: self._transmitter,
             CONF_CHANNELS: int(channels),
         }
         if self._receiver is not None:
             data[CONF_RECEIVER] = self._receiver
         return self.async_create_entry(
-            title=f"Dooya RF {self._remote_id:06X}",
+            title=f"Dooya RF {self._remote_id:07X}",
             data=data,
         )
 
@@ -303,6 +312,31 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
             transmitter = registry.async_get(user_input[CONF_TRANSMITTER])
             if transmitter is None or transmitter.entity_id not in transmitters:
                 errors[CONF_TRANSMITTER] = "invalid_transmitter"
+            remote_text = str(
+                user_input.get(CONF_REMOTE_ID, f"0x{entry.data[CONF_REMOTE_ID]:07X}")
+            ).strip()
+            try:
+                remote_id = int(
+                    remote_text, 16 if remote_text.lower().startswith("0x") else 10
+                )
+                if not 0 <= remote_id <= MAX_REMOTE_ID:
+                    raise ValueError
+            except ValueError:
+                errors[CONF_REMOTE_ID] = "invalid_remote_id"
+            else:
+                new_unique_id = f"{remote_id:07x}"
+                if any(
+                    other.entry_id != entry.entry_id
+                    and (
+                        other.unique_id == new_unique_id
+                        or (
+                            other.version == 1
+                            and other.data[CONF_REMOTE_ID] << 4 == remote_id
+                        )
+                    )
+                    for other in self.hass.config_entries.async_entries(DOMAIN)
+                ):
+                    errors[CONF_REMOTE_ID] = "already_configured"
             selected = user_input[CONF_RECEIVER]
             if (
                 selected != NO_RECEIVER
@@ -313,10 +347,13 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 data = dict(entry.data)
                 data[CONF_TRANSMITTER] = transmitter.id
+                data[CONF_REMOTE_ID] = remote_id
                 data.pop(CONF_RECEIVER, None)
                 if selected != NO_RECEIVER:
                     data[CONF_RECEIVER] = selected
-                return self.async_update_reload_and_abort(entry, data=data)
+                return self.async_update_reload_and_abort(
+                    entry, data=data, unique_id=f"{remote_id:07x}"
+                )
         sources = await async_list_sources(self.hass)
         configured = entry.data.get(CONF_RECEIVER, NO_RECEIVER)
         options = [selector.SelectOptionDict(value=NO_RECEIVER, label="No receiver")]
@@ -344,6 +381,12 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
                     ): selector.EntitySelector(
                         selector.EntitySelectorConfig(include_entities=transmitters)
                     ),
+                    vol.Optional(
+                        CONF_REMOTE_ID,
+                        description={
+                            "suggested_value": f"0x{entry.data[CONF_REMOTE_ID]:07X}"
+                        },
+                    ): selector.TextSelector(),
                     vol.Required(
                         CONF_RECEIVER, default=configured
                     ): selector.SelectSelector(

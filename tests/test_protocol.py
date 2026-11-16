@@ -17,10 +17,10 @@ def test_oem_frame_and_repeats(button: int) -> None:
     expected = [4672, -1508]
     for bit in bits:
         expected.extend((680, -396) if bit == "1" else (328, -748))
-    assert encode_timings(0x123C14, 1, button) == expected
+    assert encode_timings(0x123C140, 1, button) == expected
     assert all(sum(map(abs, expected[i : i + 2])) == 1076 for i in range(2, 82, 2))
 
-    command = make_command(0x123C14, 1, button)
+    command = make_command(0x123C140, 1, button)
     assert command.frequency == 433_934_000
     assert command.modulation == "OOK"
     assert command.repeat_count == 2
@@ -46,7 +46,7 @@ def test_oem_frame_and_repeats(button: int) -> None:
 
 def test_frequency_override_and_final_zero() -> None:
     """Frequency overrides preserve data; a final zero preserves its frame interval."""
-    command = make_command(0xABCDEF, 255, 2, 433_921_000)
+    command = make_command(0xABCDEFF, 15, 2, 433_921_000)
     assert command.frequency == 433_921_000
     timings = command.get_raw_timings()
     assert timings[-2:] == [328, -8146]
@@ -58,12 +58,12 @@ def test_frequency_override_and_final_zero() -> None:
 @pytest.mark.parametrize("button", range(16))
 def test_falling_edge_changes_preserve_all_rising_edges(button: int) -> None:
     """Keep every rising edge, including repeat starts, at its previous offset."""
-    payload = (0x123C14 << 16) | (1 << 8) | (button << 4) | button
+    payload = (0x123C140 << 12) | (1 << 8) | (button << 4) | button
     previous = [4700, -1480]
     for bit in f"{payload:040b}":
         previous.extend((704, -372) if bit == "1" else (354, -722))
     previous[-1] = -8120
-    current = make_command(0x123C14, 1, button).get_raw_timings()
+    current = make_command(0x123C140, 1, button).get_raw_timings()
 
     old_elapsed = new_elapsed = 0
     for index, (old, new) in enumerate(zip(previous * 3, current * 3, strict=True)):
@@ -78,13 +78,13 @@ def test_falling_edge_changes_preserve_all_rising_edges(button: int) -> None:
 
 def test_programming_frames() -> None:
     """P2 keeps the existing symbols and sends 0xCC four times at 57.3 ms."""
-    command = make_programming_command(0x123C14, 1, 433_921_000)
+    command = make_programming_command(0x123C140, 1, 433_921_000)
     assert command.frequency == 433_921_000
     assert command.modulation == "OOK"
     assert command.repeat_count == 3
     timings = command.get_raw_timings()
     assert len(timings) == 82
-    assert timings[:-1] == encode_timings(0x123C14, 1, 0xC)[:-1]
+    assert timings[:-1] == encode_timings(0x123C140, 1, 0xC)[:-1]
     assert timings[-1] == -8828
     assert sum(map(abs, timings)) == 57_300
     sequence = timings * (command.repeat_count + 1)

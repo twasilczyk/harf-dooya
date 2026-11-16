@@ -1,9 +1,14 @@
 # Dooya RF transmission
 
 The shared Python encoder in `custom_components/harf_dooya/protocol.py` generates
-all commands. The payload remains a 24-bit remote ID, 8-bit channel, and two
-identical command nibbles. Open = 1, Close = 3, Stop = 5. For remote 0x123C14,
+all commands. The payload remains a 28-bit remote ID, 4-bit channel, and two
+identical command nibbles. Open = 1, Close = 3, Stop = 5. For remote 0x123C140,
 channel 1, Stop is `12 3C 14 01 55`.
+
+The upper nibble of the former 8-bit channel byte is part of the 28-bit remote ID.
+For example, playroom remote `0x4231157`, channel 4, Close gives
+`42 31 15 74 33`, and channel 0 (All) gives `42 31 15 70 33`.
+Carrier and pulse timings are unchanged.
 
 P2 programming uses nibble `0xC` twice, giving `12 3C 14 01 CC` for the same
 remote and channel. The remote has one configuration button on the existing

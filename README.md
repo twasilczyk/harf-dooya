@@ -20,7 +20,7 @@ Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
   does not provide this API.
 - A remote already paired with your blinds, and its channel count.
 - Optionally, an ESPHome RF receiver or a `hackrf_proxy` integration to learn its
-  ID and observe physical presses. Without a receiver, enter the ID manually.
+  28-bit ID and observe physical presses. Without a receiver, enter the ID manually.
 
 ## Install with HACS
 
@@ -55,12 +55,12 @@ Download the source archive from a
 4. With a receiver, press **Stop** on the physical remote during the 30-second
    learning dialog. Any consistently repeated valid Dooya command can learn its
    ID. On timeout or receiver failure, retry or choose manual entry. Manual IDs
-   accept decimal or `0x`-prefixed hexadecimal, for example `0x00123C14`.
-5. Enter the number of numbered channels (1–255). Learning a channel does not
+   accept decimal or `0x`-prefixed hexadecimal, for example `0x4231157`.
+5. Enter the number of numbered channels (1–15). Learning a channel does not
    determine the channel count. No RF command is sent during setup or learning.
 
 For three channels, setup creates **All blinds**, **Blind 1**, **Blind 2**, and **Blind 3** under
-the remote's device. Channels run from 1 to the configured count (maximum 255).
+the remote's device. Channels run from 1 to the configured count (maximum 15).
 **All blinds** uses channel 0, the remote's broadcast channel, which is not included
 in that count. Its controls send one broadcast command to all blinds paired with
 the remote, using the same frequency, timings, and three-frame sequence.
@@ -97,10 +97,15 @@ only exposes transmitters. It ignores IR/unknown/transmit-only channels and
 rediscovers RF channels on reconnect. HackRF uses its RX dispatcher contract.
 
 Use the integration entry's **Reconfigure** action to change transmitter and optional
-receiver without changing the remote ID, channel count, entity IDs or frequency
-option. An offline/missing configured receiver can be retained or replaced.
+receiver without changing the channel count, HA entity identities or frequency
+option. You can also correct the complete 28-bit remote ID (including the upper
+nibble of the former channel byte) without recreating the existing entities. An offline/missing configured receiver can be retained or replaced.
 **Configure** continues to set the per-remote transmit frequency independently.
-Existing entries without a receiver require no migration and remain transmit-only.
+Existing entries without a receiver remain transmit-only. v1 entries automatically
+migrate from a 24-bit ID to a 28-bit ID by shifting left four bits. Their
+original HA entity/device identities are preserved. For nonzero prefixes use
+**Reconfigure** to set the full ID: master `0x123C140`, kids `0x7B31154`,
+playroom `0x4231157`. Any old channel count above 15 is capped to 15.
 The HA minimum remains 2026.9.2; no native HA RF receiver API is required.
 
 Local TX echoes matching the channel and command are suppressed during sending
@@ -121,7 +126,7 @@ Home Assistant treats `harf_dooya` as a separate integration.
 
 The encoder follows OpenHarf's
 [`dooya_protocol.cpp`](https://github.com/twasilczyk/openharf/blob/main/firmware/components/remote_base/dooya_protocol.cpp):
-24-bit remote ID, 8-bit channel, and two identical 4-bit button/check values.
+28-bit remote ID, 4-bit channel (0–15), and two identical 4-bit button/check values.
 Open uses `1`, close `3`, and stop `5`. Each command is sent three times, with
 an 8,144 µs silent interval measured from the final RF falling edge to the next
 sync rising edge. Programmed timings fitted to the OEM envelope are sync 4,672/1,508 µs,

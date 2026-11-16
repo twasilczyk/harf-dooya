@@ -56,7 +56,7 @@ class DooyaCover(DooyaEntity, CoverEntity):
     ) -> None:
         """Name the cover for its remote channel."""
         super().__init__(entry, channel, transmitter_entity_id)
-        self._attr_unique_id = f"{self._remote_id:06x}_{channel}"
+        self._attr_unique_id = f"{self._identity}_{channel}"
         self._attr_name = "All blinds" if channel == 0 else f"Blind {channel}"
 
     async def async_added_to_hass(self) -> None:

@@ -7,7 +7,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import BUTTON_PROGRAM, CONF_REMOTE_ID, CONF_TRANSMITTER
+from .const import BUTTON_PROGRAM, CONF_ENTITY_KEY, CONF_REMOTE_ID, CONF_TRANSMITTER
 from .entity import DooyaEntity
 from .protocol import make_programming_command
 
@@ -21,15 +21,15 @@ async def async_setup_entry(
 ) -> None:
     """Add the remote's single P2 button and retire the old per-channel entities."""
     registry = er.async_get(hass)
-    remote_id = f"{entry.data[CONF_REMOTE_ID]:06x}"
-    unique_id = f"{remote_id}_p2"
+    identity = entry.data.get(CONF_ENTITY_KEY, f"{entry.data[CONF_REMOTE_ID]:07x}")
+    unique_id = f"{identity}_p2"
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.domain != "button" or entity.platform != "harf_dooya":
             continue
         prefix, separator, suffix = entity.unique_id.rpartition("_")
-        if not separator or suffix != "p2" or not prefix.startswith(f"{remote_id}_"):
+        if not separator or suffix != "p2" or not prefix.startswith(f"{identity}_"):
             continue
-        channel = prefix[len(remote_id) + 1 :]
+        channel = prefix[len(identity) + 1 :]
         if not channel.isdecimal():
             continue
         if (
@@ -53,7 +53,7 @@ class DooyaProgrammingButton(DooyaEntity, ButtonEntity):
     def __init__(self, entry: ConfigEntry, transmitter_entity_id: str) -> None:
         """Identify the remote's programming button on the existing device."""
         super().__init__(entry, 1, transmitter_entity_id)
-        self._attr_unique_id = f"{self._remote_id:06x}_p2"
+        self._attr_unique_id = f"{self._identity}_p2"
         self._attr_name = "P2 (Programming)"
 
     async def async_press(self) -> None:
