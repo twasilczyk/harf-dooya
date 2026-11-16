@@ -88,19 +88,64 @@ event. Numbered-channel presses leave the broadcast cover's diagnostics unchange
 observations are **button presses, not verified motor state**. Receiving a command
 never transmits another.
 
-Covers report optimistic positions: Open assumes 100% (`open`), Close assumes 0%
-(`closed`), and Stop assumes 50% (`open`). Stop sends only the Stop command; it does
-not move the blind to 50%. Successfully sent HA commands and received physical
-remote presses update these estimates. P2 and unknown commands leave them unchanged.
-All covers start at 50%, including after restart or integration reload; positions
-are not persisted. There is no physical position feedback, travel-time tracking,
-calibration, or arbitrary percentage control. Missed remote presses leave estimates
-stale, and receiver disconnection does not reset them.
+Covers estimate position from elapsed travel time; there is no physical position
+feedback. Each numbered blind has a **Blind N travel time** setting in the device's
+**Configuration** section. Enter its full end-to-end travel time in seconds, shared
+by opening and closing (default 30 seconds; range 1–3600, in 0.1-second increments).
+Settings are saved across restarts. Changing a time does not move the blind or reset
+its position; an ongoing movement keeps the time it started with.
 
-Channel 0 (All blinds) updates every channel with one broadcast command. Its
-position tracks the last assumed broadcast action, not an aggregate measurement
-of the individual blinds. Subsequent numbered-channel commands update only that
-channel.
+At startup, restart, or integration reload, position and open/closed state are
+**unknown**. Open and Close immediately report `opening` or `closing` after a
+successful HA transmission, or when a physical remote command is received. From a
+known position, the percentage advances linearly with elapsed time. From an unknown
+position, the percentage stays unknown until a full uninterrupted travel time has
+elapsed in one direction. Stopping earlier keeps it unknown; reversing starts a
+new full travel time. Repeating the same direction while moving does not restart
+the timer.
+
+At the estimated end of travel, the displayed position stays at 99% when opening
+or 1% when closing for an extra **20% of the configured full travel time**. This
+margin is a constant, including for partial journeys. Only afterward does the cover
+report 100% (`open`) or 0% (`closed`). For example, a blind with a 30-second travel
+time starting from unknown shows 99% after 30 seconds of opening and 100% after
+36 seconds. Ordinary Open/Close timers only update the UI; the motor stops at its
+own end limit.
+
+Stop sends the existing Stop command and freezes the current estimated percentage,
+including 99%/1% during the extra-time period. P2 and unknown commands do not start
+or stop a movement estimate. Missed remote presses can leave estimates stale.
+Radio disconnection does not reset the model or stop an already-running timer; cover availability still follows the
+transmitter, independently of the receiver.
+
+Channel 0 (All blinds) starts or stops every blind's estimate with one broadcast
+RF command. Each numbered blind uses its own configured time. All blinds has a
+separate estimate of the last broadcast action, using the longest configured
+travel time; it is not an aggregate measurement or confirmation that every blind
+has stopped. Subsequent numbered-channel commands update only that channel.
+
+Numbered covers also support HA's position slider and `cover.set_cover_position`.
+When position is unknown, a target below 50% closes fully; a target of 50% or above
+opens fully. This establishes an endpoint using the normal full travel time and
+20% margin, without a timed Stop or a subsequent move to the original target.
+Once position is known, HA sends Open or Close, waits for the calculated travel
+time, then sends Stop for intermediate targets. For example, moving from 25% to 75% with
+a 20-second travel time takes approximately 10 seconds. Intermediate targets do
+not include the 20% endpoint margin. Targets of 0% and 100% use ordinary full
+Close/Open behavior, including the margin, and also work from unknown.
+
+A new target replaces the previous one. Manual HA Open/Close/Stop requests and
+received physical movement commands cancel the pending timed Stop for affected
+channels; broadcast commands cancel all of them. P2, unknown commands, and echoes
+do not cancel targets. Reloading or restarting cancels pending targets and resets
+position to unknown; it does not send a physical Stop. All blinds has no percentage
+slider because its channels can have different starting positions and travel times.
+
+Position control remains approximate: RF latency, transmitter queueing, and missed
+commands can cause overshoot. The final estimate reflects elapsed time when Stop
+successfully sends, rather than forcing the display to the requested target. If
+sending Stop fails, HA logs the error and continues estimating movement toward
+the endpoint; it does not claim the blind stopped at the target.
 
 The receiver is independent of the transmitter. A missing/offline receiver makes
 Remote action unavailable while covers and P2 remain usable with their transmitter.

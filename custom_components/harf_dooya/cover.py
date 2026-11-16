@@ -3,6 +3,7 @@
 from typing import Any
 
 from homeassistant.components.cover import (
+    ATTR_POSITION,
     CoverDeviceClass,
     CoverEntity,
     CoverEntityFeature,
@@ -71,6 +72,8 @@ class DooyaCover(DooyaEntity, CoverEntity):
     ) -> None:
         """Name the cover for its remote channel."""
         super().__init__(entry, channel, transmitter_entity_id)
+        if channel != 0:
+            self._attr_supported_features |= CoverEntityFeature.SET_POSITION
         self._attr_unique_id = f"{self._identity}_{channel}"
         self._attr_name = "All blinds" if channel == 0 else f"Blind {channel}"
 
@@ -79,14 +82,23 @@ class DooyaCover(DooyaEntity, CoverEntity):
         self.async_on_remove(self._remote.async_add_listener(self.async_write_ha_state))
 
     @property
-    def current_cover_position(self) -> int:
+    def current_cover_position(self) -> int | None:
         """Return the assumed position, not measured motor feedback."""
-        return self._remote.assumed_positions[self._channel]
+        return self._remote.motions[self._channel].percentage
 
     @property
-    def is_closed(self) -> bool:
+    def is_closed(self) -> bool | None:
         """Only the assumed fully closed position is closed."""
-        return self.current_cover_position == 0
+        position = self.current_cover_position
+        return None if position is None else position == 0
+
+    @property
+    def is_opening(self) -> bool:
+        return self._remote.motions[self._channel].direction == BUTTON_OPEN
+
+    @property
+    def is_closing(self) -> bool:
+        return self._remote.motions[self._channel].direction == BUTTON_CLOSE
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -112,4 +124,10 @@ class DooyaCover(DooyaEntity, CoverEntity):
         await self._async_transmit(
             BUTTON_STOP,
             make_command(self._remote_id, self._channel, BUTTON_STOP),
+        )
+
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Time a numbered channel's movement and send Stop at its target."""
+        await self._remote.async_set_position(
+            self._channel, kwargs[ATTR_POSITION], self._send_command
         )

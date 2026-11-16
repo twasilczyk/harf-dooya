@@ -2,7 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from custom_components.harf_dooya.device import DooyaRemote
 from custom_components.harf_dooya.protocol import make_command, make_programming_command
@@ -12,8 +12,10 @@ from .test_decoder import remote_frame
 
 def make_remote(hass=None, remote_id=0x123C140):
     hass = hass or SimpleNamespace(data={})
+    hass.loop = Mock()
     entry = SimpleNamespace(
-        data={"remote_id": remote_id, "channels": 3, "transmitter": "radio-uuid"}
+        data={"remote_id": remote_id, "channels": 3, "transmitter": "radio-uuid"},
+        options={},
     )
     return DooyaRemote(hass, entry)
 
@@ -103,7 +105,7 @@ def test_unload_cancels_pending_senders():
         result = await asyncio.gather(task, return_exceptions=True)
         assert isinstance(result[0], asyncio.CancelledError)
         assert not calls
-        assert remote.assumed_positions == {0: 50, 1: 50, 2: 50, 3: 50}
+        assert remote.assumed_positions == {0: None, 1: None, 2: None, 3: None}
         assert not remote._tx_tasks
 
     asyncio.run(run())
@@ -116,16 +118,16 @@ def test_positions_notified_only_after_successful_send():
         remote.async_add_listener(lambda: snapshots.append(dict(remote.assumed_positions)))
 
         async def send(command):
-            assert remote.assumed_positions[1] == 50
+            assert remote.assumed_positions[1] is None
             assert not snapshots
 
         await remote.async_transmit(1, 1, make_command(1, 1, 1), send)
-        assert snapshots == [{0: 50, 1: 100, 2: 50, 3: 50}]
+        assert snapshots == [{0: None, 1: None, 2: None, 3: None}]
         remote._availability(False)
-        assert remote.assumed_positions[1] == 100
+        assert remote.motions[1].direction == 1
         # An echo must not overwrite a newer assumption from another command.
         remote._observe(1, 3, "remote")
         remote.async_receive(remote_frame(command=1) * 3)
-        assert remote.assumed_positions[1] == 0
+        assert remote.motions[1].direction == 3
 
     asyncio.run(run())

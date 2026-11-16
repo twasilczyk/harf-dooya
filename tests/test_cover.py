@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.components.cover import DATA_COMPONENT, CoverEntityFeature
 from homeassistant.components.radio_frequency.helpers import async_send_command
-from homeassistant.const import STATE_CLOSED, STATE_OPEN, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import (
+    STATE_CLOSING,
+    STATE_OPENING,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -79,14 +84,15 @@ async def test_channels_and_commands(
         assert cover._rf_transmitter_entity_id == transmitter.entity_id
         state = hass.states.get(entity_id)
         assert state is not None
-        assert state.state == STATE_OPEN
+        assert state.state == STATE_UNKNOWN
         assert state.attributes["assumed_state"] is True
         assert state.attributes["device_class"] == "blind"
-        assert state.attributes["current_position"] == 50
-        assert cover.is_closed is False
-        assert state.attributes["is_closed"] is False
+        assert "current_position" not in state.attributes
+        assert cover.is_closed is None
+        assert state.attributes["is_closed"] is None
         assert state.attributes["supported_features"] == (
             CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
+            | (CoverEntityFeature.SET_POSITION if channel != 0 else 0)
         )
 
         for service, button in (
@@ -97,12 +103,12 @@ async def test_channels_and_commands(
             await hass.services.async_call(
                 "cover", service, {"entity_id": entity_id}, blocking=True
             )
-            position = {1: 100, 3: 0, 5: 50}[button]
             state = hass.states.get(entity_id)
-            assert state.attributes["current_position"] == position
-            assert state.state == (STATE_CLOSED if position == 0 else STATE_OPEN)
-            assert state.attributes["is_closed"] is (position == 0)
-            assert cover.is_closed is (position == 0)
+            assert "current_position" not in state.attributes
+            assert state.state == {
+                1: STATE_OPENING, 3: STATE_CLOSING, 5: STATE_UNKNOWN
+            }[button]
+            assert cover.is_closed is None
             command = transmitter.commands[-1]
             timings = command.get_raw_timings()
             assert len(timings) == 82
@@ -114,8 +120,8 @@ async def test_channels_and_commands(
             assert command.repeat_count == 2
             assert timings[-1] == -8144
 
-        # Stop reports an estimate, not measured motor position.
-        assert hass.states.get(entity_id).state == STATE_OPEN
+        # Interrupted travel from unknown remains unknown.
+        assert hass.states.get(entity_id).state == STATE_UNKNOWN
 
     assert len(transmitter.commands) == 12
 
@@ -132,7 +138,7 @@ async def test_transmitter_availability_rename_and_unload(
     assert len(covers) == 4
     assert hass.states.get(transmitter.entity_id).state == STATE_UNKNOWN
     assert all(
-        hass.states.get(entity_id).state == STATE_OPEN for entity_id in covers
+        hass.states.get(entity_id).state == STATE_UNKNOWN for entity_id in covers
     )
 
     transmitter._attr_available = False
@@ -152,7 +158,7 @@ async def test_transmitter_availability_rename_and_unload(
     transmitter.async_write_ha_state()
     await hass.async_block_till_done()
     assert all(
-        hass.states.get(entity_id).state == STATE_OPEN for entity_id in covers
+        hass.states.get(entity_id).state == STATE_UNKNOWN for entity_id in covers
     )
 
     await hass.services.async_call(
@@ -218,6 +224,6 @@ async def test_failed_transmission_preserves_position(hass, transmitter, config_
                 "cover", "close_cover", {"entity_id": entity_id}, blocking=True
             )
     state = hass.states.get(entity_id)
-    assert state.state == STATE_OPEN
+    assert state.state == STATE_OPENING
     assert state.attributes == previous.attributes
-    assert config_entry.runtime_data.assumed_positions[1] == 100
+    assert config_entry.runtime_data.motions[1].direction == 1

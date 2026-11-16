@@ -15,7 +15,7 @@ from .const import (
 )
 from .device import DooyaRemote
 
-PLATFORMS = [Platform.COVER, Platform.BUTTON, Platform.EVENT]
+PLATFORMS = [Platform.COVER, Platform.BUTTON, Platform.EVENT, Platform.NUMBER]
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

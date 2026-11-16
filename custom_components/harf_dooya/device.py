@@ -6,12 +6,13 @@ Receiver and echo lifecycle follows harf-insoma and harf-rhine (LICENSE.rhine).
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from time import monotonic
 from weakref import WeakValueDictionary
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
 from rf_protocols import RadioFrequencyCommand
 
@@ -24,18 +25,14 @@ from .const import (
     CONF_RECEIVER,
     CONF_REMOTE_ID,
     CONF_TRANSMITTER,
+    CONF_TRAVEL_TIMES,
 )
-from .protocol import Frame, FrameStream
+from .motion import DEFAULT_TRAVEL_TIME, POSITION_UPDATE_INTERVAL, Motion
+from .protocol import Frame, FrameStream, make_command
 from .receiver import async_get_source
 
 _LOGGER = logging.getLogger(__name__)
 ECHO_TAIL = 0.35
-DEFAULT_ASSUMED_POSITION = 50
-COMMAND_POSITIONS = {
-    BUTTON_OPEN: 100,
-    BUTTON_CLOSE: 0,
-    BUTTON_STOP: DEFAULT_ASSUMED_POSITION,
-}
 COMMAND_NAMES = {
     BUTTON_OPEN: "open",
     BUTTON_CLOSE: "close",
@@ -43,6 +40,14 @@ COMMAND_NAMES = {
     BUTTON_PROGRAM: "p2",
 }
 _LOCKS_KEY = "harf_dooya_transmitter_locks"
+
+
+@dataclass
+class PositionTarget:
+    """Identity token for one request, including its cancellable Stop timer."""
+
+    position: int
+    timer: asyncio.TimerHandle | None = None
 
 
 class DooyaRemote:
@@ -55,9 +60,9 @@ class DooyaRemote:
         self.channels = entry.data[CONF_CHANNELS]
         self.receiver_available = False
         self.observations: dict[int, dict] = {}
-        self.assumed_positions: dict[int, int] = {
-            channel: DEFAULT_ASSUMED_POSITION for channel in range(self.channels + 1)
-        }
+        self.motions = {channel: Motion() for channel in range(self.channels + 1)}
+        self._position_timer: asyncio.TimerHandle | None = None
+        self._position_targets: dict[int, PositionTarget] = {}
         self._decoder = FrameStream()
         self._listeners: list[Callable[[], None]] = []
         self._event_listeners: list[Callable[[Frame], None]] = []
@@ -125,17 +130,61 @@ class DooyaRemote:
 
     @callback
     def _observe(self, channel: int, command: int, origin: str) -> None:
+        if origin == "remote" and command in (BUTTON_OPEN, BUTTON_CLOSE, BUTTON_STOP):
+            self._cancel_position_targets(channel)
         observation = {
             "last_command": COMMAND_NAMES.get(command, f"unknown_0x{command:X}"),
             "last_command_origin": origin,
             "last_command_timestamp": dt_util.utcnow().isoformat(),
         }
         channels = range(self.channels + 1) if channel == 0 else (channel,)
-        position = COMMAND_POSITIONS.get(command)
+        now = monotonic()
+        # A command can arrive before an overdue timer callback. Advance every
+        # channel before replacing that timer so no completed movement is stranded.
+        for motion in self.motions.values():
+            motion.update(now)
         for target in channels:
             self.observations[target] = observation
-            if position is not None:
-                self.assumed_positions[target] = position
+            self.motions[target].observe(command, now, self.travel_time(target))
+        self._schedule_position_update(now)
+        self._notify()
+
+    @property
+    def assumed_positions(self) -> dict[int, int | None]:
+        """Read the last published estimates without advancing time in getters."""
+        return {channel: motion.percentage for channel, motion in self.motions.items()}
+
+    def travel_time(self, channel: int) -> float:
+        """All blinds uses the slowest configured blind, not an aggregate position."""
+        times = self.entry.options.get(CONF_TRAVEL_TIMES, {})
+        if channel == 0:
+            return max(self.travel_time(i) for i in range(1, self.channels + 1))
+        return times.get(str(channel), DEFAULT_TRAVEL_TIME)
+
+    @callback
+    def _schedule_position_update(self, now: float) -> None:
+        if self._position_timer is not None:
+            self._position_timer.cancel()
+            self._position_timer = None
+        deadlines = [
+            deadline
+            for motion in self.motions.values()
+            if motion.direction is not None
+            for deadline in (motion.travel_end, motion.finish)
+            if deadline > now
+        ]
+        if deadlines and not self._closed:
+            delay = min(POSITION_UPDATE_INTERVAL, min(deadlines) - now)
+            self._position_timer = self.hass.loop.call_later(delay, self._update_positions)
+
+    @callback
+    def _update_positions(self) -> None:
+        if self._closed:
+            return
+        now = monotonic()
+        for motion in self.motions.values():
+            motion.update(now)
+        self._schedule_position_update(now)
         self._notify()
 
     @callback
@@ -162,40 +211,183 @@ class DooyaRemote:
         send: Callable[[RadioFrequencyCommand], Awaitable[None]],
     ) -> None:
         """Serialize covers/P2 across entries sharing a radio, including queued airtime."""
+        if command in (BUTTON_OPEN, BUTTON_CLOSE, BUTTON_STOP):
+            self._cancel_position_targets(channel)
         task = asyncio.current_task()
         self._tx_tasks.add(task)
         try:
             async with self._tx_lock:
-                if self._closed:
-                    raise HomeAssistantError("The Dooya remote has been unloaded")
-                airtime = (
-                    sum(map(abs, rf_command.get_raw_timings()))
-                    * (rf_command.repeat_count + 1)
-                    / 1_000_000
+                await self._async_send_locked(channel, command, rf_command, send)
+        finally:
+            self._tx_tasks.discard(task)
+
+    async def _async_send_locked(
+        self,
+        channel: int,
+        command: int,
+        rf_command: RadioFrequencyCommand,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+        on_sent: Callable[[], None] | None = None,
+    ) -> None:
+        """Send with the transmitter lock held, preserving echo and airtime rules."""
+        if self._closed:
+            raise HomeAssistantError("The Dooya remote has been unloaded")
+        airtime = (
+            sum(map(abs, rf_command.get_raw_timings()))
+            * (rf_command.repeat_count + 1)
+            / 1_000_000
+        )
+        key = (channel, command)
+        now = monotonic()
+        self._echo_until = {k: end for k, end in self._echo_until.items() if end > now}
+        self._sending = key
+        self._echo_until[key] = now + airtime + ECHO_TAIL
+        try:
+            await send(rf_command)
+            if not self._closed:
+                self._observe(channel, command, "home_assistant")
+                if on_sent is not None:
+                    on_sent()
+        finally:
+            self._sending = None
+            self._echo_until[key] = monotonic() + airtime + ECHO_TAIL
+            # Native API calls can return before the radio has sent the burst.
+            if not self._closed:
+                await asyncio.sleep(airtime)
+
+    @callback
+    def _cancel_position_targets(self, channel: int) -> None:
+        channels = range(self.channels + 1) if channel == 0 else (channel,)
+        for target_channel in channels:
+            target = self._position_targets.pop(target_channel, None)
+            if target is not None and target.timer is not None:
+                target.timer.cancel()
+
+    async def async_set_position(
+        self,
+        channel: int,
+        position: int,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+    ) -> None:
+        """Start a numbered blind and arrange a Stop without blocking HA for travel."""
+        if not 1 <= channel <= self.channels or not 0 <= position <= 100:
+            raise ServiceValidationError(
+                "Set position requires a numbered blind and 0–100%"
+            )
+        if position in (0, 100):
+            command = BUTTON_OPEN if position == 100 else BUTTON_CLOSE
+            await self.async_transmit(
+                channel, command, make_command(self.remote_id, channel, command), send
+            )
+            return
+        self._cancel_position_targets(channel)
+        target = self._position_targets[channel] = PositionTarget(position)
+        task = asyncio.current_task()
+        self._tx_tasks.add(task)
+        try:
+            async with self._tx_lock:
+                if self._closed or self._position_targets.get(channel) is not target:
+                    return
+                # Recalculate after waiting for the radio, not when the request arrived.
+                self._update_positions()
+                motion = self.motions[channel]
+                if motion.position is None:
+                    # Without a starting position, establish the nearest endpoint
+                    # to the requested target instead of timing an intermediate Stop.
+                    self._cancel_position_targets(channel)
+                    command = BUTTON_OPEN if position >= 50 else BUTTON_CLOSE
+                    await self._async_send_locked(
+                        channel, command,
+                        make_command(self.remote_id, channel, command), send,
+                    )
+                    return
+                if motion.percentage == position:
+                    self._cancel_position_targets(channel)
+                    if motion.direction is not None:
+                        await self._async_send_locked(
+                            channel, BUTTON_STOP,
+                            make_command(self.remote_id, channel, BUTTON_STOP),
+                            send,
+                        )
+                    return
+                command = BUTTON_OPEN if position > motion.position else BUTTON_CLOSE
+                await self._async_send_locked(
+                    channel, command, make_command(self.remote_id, channel, command),
+                    send,
+                    lambda: self._schedule_target_stop(channel, target, send),
                 )
-                key = (channel, command)
-                now = monotonic()
-                self._echo_until = {
-                    k: end for k, end in self._echo_until.items() if end > now
-                }
-                self._sending = key
-                self._echo_until[key] = now + airtime + ECHO_TAIL
-                try:
-                    await send(rf_command)
-                    if not self._closed:
-                        self._observe(channel, command, "home_assistant")
-                finally:
-                    self._sending = None
-                    self._echo_until[key] = monotonic() + airtime + ECHO_TAIL
-                    # Native API calls can return before the radio has sent the burst.
-                    if not self._closed:
-                        await asyncio.sleep(airtime)
+        except BaseException:
+            if self._position_targets.get(channel) is target:
+                self._cancel_position_targets(channel)
+            raise
+        finally:
+            self._tx_tasks.discard(task)
+
+    @callback
+    def _schedule_target_stop(
+        self,
+        channel: int,
+        target: PositionTarget,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+    ) -> None:
+        if self._closed or self._position_targets.get(channel) is not target:
+            return
+        motion = self.motions[channel]
+        assert motion.position is not None
+        remaining = (
+            target.position - motion.position
+            if motion.direction == BUTTON_OPEN
+            else motion.position - target.position
+        )
+        delay = max(0.0, remaining) / 100 * motion.travel_time
+        target.timer = self.hass.loop.call_later(
+            delay, self._start_target_stop, channel, target, send
+        )
+
+    @callback
+    def _start_target_stop(
+        self,
+        channel: int,
+        target: PositionTarget,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+    ) -> None:
+        target.timer = None
+        if self._closed or self._position_targets.get(channel) is not target:
+            return
+        self.hass.async_create_background_task(
+            self._async_target_stop(channel, target, send), "Dooya timed Stop"
+        )
+
+    async def _async_target_stop(
+        self,
+        channel: int,
+        target: PositionTarget,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+    ) -> None:
+        task = asyncio.current_task()
+        self._tx_tasks.add(task)
+        try:
+            async with self._tx_lock:
+                # A manual command or newer target may have superseded this queued Stop.
+                if self._closed or self._position_targets.get(channel) is not target:
+                    return
+                self._position_targets.pop(channel)
+                await self._async_send_locked(
+                    channel, BUTTON_STOP,
+                    make_command(self.remote_id, channel, BUTTON_STOP), send,
+                )
+        except Exception:
+            _LOGGER.exception("Could not send timed Stop for Dooya channel %s", channel)
         finally:
             self._tx_tasks.discard(task)
 
     @callback
     def async_stop(self) -> None:
         self._closed = True
+        self._cancel_position_targets(0)
+        if self._position_timer is not None:
+            self._position_timer.cancel()
+            self._position_timer = None
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
