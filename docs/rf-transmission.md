@@ -137,3 +137,42 @@ A fresh RF capture is required to confirm the actual carrier and edge timings;
 software tests verify requested durations, not CC1101 analog edge delays or the
 USRP frequency reference. The per-remote frequency permits subsequent adjustment
 without altering crystal calibration.
+
+## Reception and press confirmation
+
+Reception has its own tolerant windows and does not modify any TX constants:
+
+| RX field | Allowed µs |
+| --- | --- |
+| Sync HIGH / LOW | 4000–5400 / 1100–1900 |
+| Zero HIGH / LOW | 250–460 / 600–850 |
+| One HIGH / LOW | 560–820 / 250–510 |
+| Normal bit period | 950–1220 |
+
+Normal bit HIGH/LOW windows do not overlap. Every non-final bit must satisfy
+both its symbol windows and overall period. The two final command nibbles must
+match. Unknown commands are preserved as typed frames. The final space may be
+absent (81 durations), truncated, a normal bit space, or extended idle up to
+20 ms. Extended idle in the middle of a frame is rejected. A stream with no final
+space waits for the next sync to delimit the frame; a final space may arrive in
+a later callback. Invalid types (including booleans/floats), zero durations,
+malformed symbols and bad checks break consecutive-frame confirmation.
+
+`FrameStream` stores at most 82 durations. It resynchronizes at sync marks,
+handles concatenated/split frames, and resets partial data on disconnect or
+300 ms without input. `CONFIRM_FRAMES=2` requires the same remote ID, channel and
+command in two consecutive frames. Repeated confirmed frames are deduplicated
+within a press; after `PRESS_TIMEOUT=0.3` a new identical press can be reported.
+The recent-press set is bounded as well.
+
+`receiver.py` owns transport adapters; `device.py` owns one subscription and
+stream per remote plus routing, diagnostics and TX echo protection. Receiver
+availability updates affect only the event entity. Listener/discovery cleanup
+uses unsubscribe callbacks, task cancellation and connection generation checks
+so stale callbacks cannot revive unloaded entities. The transmitter's native
+RF consumer still handles availability and HA context propagation.
+
+The transmit coordinator reserves the actual waveform duration times the total
+frame count, with a 350 ms echo tail before/after enqueueing. The shared radio
+lock is retained for queued airtime to prevent cover/P2 overlap. No receive,
+learning, reconnect or restore operation enters the transmit path.

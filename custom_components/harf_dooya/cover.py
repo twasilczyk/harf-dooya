@@ -59,20 +59,32 @@ class DooyaCover(DooyaEntity, CoverEntity):
         self._attr_unique_id = f"{self._remote_id:06x}_{channel}"
         self._attr_name = f"Blind {channel}"
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._remote.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Last observed/requested action; never verified motor position."""
+        return self._remote.observations.get(self._channel, {})
+
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the blind."""
-        await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_OPEN, self._frequency)
+        await self._async_transmit(
+            BUTTON_OPEN,
+            make_command(self._remote_id, self._channel, BUTTON_OPEN, self._frequency),
         )
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the blind."""
-        await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_CLOSE, self._frequency)
+        await self._async_transmit(
+            BUTTON_CLOSE,
+            make_command(self._remote_id, self._channel, BUTTON_CLOSE, self._frequency),
         )
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the blind."""
-        await self._send_command(
-            make_command(self._remote_id, self._channel, BUTTON_STOP, self._frequency)
+        await self._async_transmit(
+            BUTTON_STOP,
+            make_command(self._remote_id, self._channel, BUTTON_STOP, self._frequency),
         )

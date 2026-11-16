@@ -7,8 +7,9 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_entity_registry_updated_event
 
 from .const import CONF_TRANSMITTER
+from .device import DooyaRemote
 
-PLATFORMS = [Platform.COVER, Platform.BUTTON]
+PLATFORMS = [Platform.COVER, Platform.BUTTON, Platform.EVENT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -29,6 +30,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, transmitter_entity_id, async_transmitter_updated
         )
     )
+    entry.runtime_data = DooyaRemote(hass, entry)
+    entry.async_on_unload(entry.runtime_data.async_stop)
+    entry.runtime_data.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

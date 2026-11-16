@@ -17,7 +17,9 @@ Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
 - An RF transmitter already added to Home Assistant, exposing a
   `radio_frequency` entity supporting **433.934 MHz OOK**. A `remote` entity alone
   does not provide this API.
-- The ID and channel count of a remote already paired with your blinds.
+- A remote already paired with your blinds, and its channel count.
+- Optionally, an ESPHome RF receiver or a `hackrf_proxy` integration to learn its
+  ID and observe physical presses. Without a receiver, enter the ID manually.
 
 ## Install with HACS
 
@@ -45,8 +47,16 @@ Download the source archive from a
 ## Set up
 
 1. Go to **Settings → Devices & services → Add integration → Dooya RF**.
-2. Select the transmitter, enter your paired remote's ID (decimal or `0x`-prefixed
-   hexadecimal, for example `0x00123C14`), and enter its number of channels.
+2. Select the RF transmitter.
+3. Select an optional ESPHome or HackRF receiver. The receiver belonging to the
+   selected transmitter is suggested when available; otherwise a sole receiver
+   is suggested. Select **No receiver** for manual setup.
+4. With a receiver, press **Stop** on the physical remote during the 30-second
+   learning dialog. Any consistently repeated valid Dooya command can learn its
+   ID. On timeout or receiver failure, retry or choose manual entry. Manual IDs
+   accept decimal or `0x`-prefixed hexadecimal, for example `0x00123C14`.
+5. Enter the number of numbered channels (1–255). Learning a channel does not
+   determine the channel count. No RF command is sent during setup or learning.
 
 For three channels, setup creates **Blind 1**, **Blind 2**, and **Blind 3** under
 the remote's device. Channels run from 1 to the configured count (maximum 255).
@@ -58,10 +68,46 @@ button for the whole remote, using channel 1. Both physical P2 keys use the same
 command, so only one P2 entity is exposed. It uses that remote's configured RF frequency
 and sends `0xCC` four times, with 57.3 ms between frame starts.
 
-The integration does not receive signals or learn remote IDs yet. The remote
-must already be paired with the blinds. There is no position feedback or travel
-timer: state stays unknown and both direction controls remain available, as with
-the existing ESPHome template covers. Availability follows the transmitter.
+Learning identifies an already paired remote; it does not pair the blinds.
+**P2 (Programming)** remains a separate, manual operation.
+
+## Physical remote reception
+
+Each remote has one **Remote action** event entity with `open`, `close`, `stop`,
+and `p2` event types. Its attributes include the remote ID, channel, and whether
+the press was broadcast. Two consecutive identical complete frames confirm a
+press; repeats are deduplicated until 300 ms of silence. Unknown valid command
+nibbles remain available as cover diagnostics, but do not generate known events.
+
+A numbered press updates only that channel's `last_command`,
+`last_command_origin`, and `last_command_timestamp`. Channel 0 updates these
+attributes on every numbered cover and generates one broadcast event. These
+observations are **button presses, not verified motor state**: position and
+open/closed state remain unknown. Receiving a command never transmits another.
+
+The receiver is independent of the transmitter. A missing/offline receiver makes
+Remote action unavailable while covers and P2 remain usable with their transmitter.
+ESPHome receivers must already be configured for the relevant 433 MHz OOK signal;
+selecting a source in HA does not retune the receiver. The backend discovers native
+RF receive channels and subscribes directly to the ESPHome API, including when HA
+only exposes transmitters. It ignores IR/unknown/transmit-only channels and
+rediscovers RF channels on reconnect. HackRF uses its RX dispatcher contract.
+
+Use the integration entry's **Reconfigure** action to change transmitter and optional
+receiver without changing the remote ID, channel count, entity IDs or frequency
+option. An offline/missing configured receiver can be retained or replaced.
+**Configure** continues to set the per-remote transmit frequency independently.
+Existing entries without a receiver require no migration and remain transmit-only.
+The HA minimum remains 2026.9.2; no native HA RF receiver API is required.
+
+Local TX echoes matching the channel and command are suppressed during sending
+and for the calculated burst airtime plus 350 ms after the send returns. An
+identical physical press inside that window cannot reliably be distinguished
+from an echo; different commands are still processed. Cover and P2 operations,
+including different remotes on the same transmitter, share a transmission lock.
+
+Receiver lifecycle patterns are adapted from `harf-insoma` and `harf-rhine`;
+the MIT attribution is included in `custom_components/harf_dooya/LICENSE.rhine`.
 
 If you installed the earlier development version under the `dooya` domain,
 remove that integration entry and its old `custom_components/dooya` directory,
@@ -105,7 +151,9 @@ python -m pytest
 ```
 
 Tests use Home Assistant 2026.9.2 and a simulated RF transmitter to check setup,
-cover commands, protocol timings, availability, renames, and unloading.
+cover/P2 commands, protocol timings, independent OEM-like decoding fixtures,
+receiver discovery, learning, remote events, echo suppression, availability,
+renames, and unloading.
 
 GitHub Actions runs these tests, Hassfest, and HACS validation. See
 [RELEASING.md](RELEASING.md) for publishing a version and adding the repository

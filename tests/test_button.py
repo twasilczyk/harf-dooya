@@ -28,14 +28,10 @@ async def test_programming_button(
     registry = er.async_get(hass)
     buttons = hass.states.async_entity_ids("button")
     assert len(buttons) == 1
-    entity_id = registry.async_get_entity_id(
-        "button", "harf_dooya", "123c14_p2"
-    )
+    entity_id = registry.async_get_entity_id("button", "harf_dooya", "123c14_p2")
     assert entity_id in buttons
     entry = registry.async_get(entity_id)
-    cover_id = registry.async_get_entity_id(
-        "cover", "harf_dooya", "123c14_1"
-    )
+    cover_id = registry.async_get_entity_id("cover", "harf_dooya", "123c14_1")
     assert entry.device_id == registry.async_get(cover_id).device_id
     assert entry.entity_category == EntityCategory.CONFIG
     await hass.services.async_call(
@@ -46,9 +42,7 @@ async def test_programming_button(
     assert command.repeat_count == 3
     timings = command.get_raw_timings()
     bits = "".join("1" if mark == 680 else "0" for mark in timings[2::2])
-    assert int(bits, 2).to_bytes(5, "big") == bytes(
-        (0x12, 0x3C, 0x14, 1, 0xCC)
-    )
+    assert int(bits, 2).to_bytes(5, "big") == bytes((0x12, 0x3C, 0x14, 1, 0xCC))
     assert sum(map(abs, timings)) == 57_300
 
     transmitter._attr_available = False
@@ -74,3 +68,26 @@ async def test_programming_button(
     assert all(
         hass.data[DATA_COMPONENT].get_entity(entity_id) is None for entity_id in buttons
     )
+
+
+async def test_previous_per_channel_buttons_consolidated(
+    hass, transmitter, config_entry
+):
+    """Retain channel one's registry entity and retire duplicate programming keys."""
+    registry = er.async_get(hass)
+    old = [
+        registry.async_get_or_create(
+            "button", "harf_dooya", f"123c14_{i}_p2", config_entry=config_entry
+        )
+        for i in range(1, 4)
+    ]
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert (
+        registry.async_get_entity_id("button", "harf_dooya", "123c14_p2")
+        == old[0].entity_id
+    )
+    assert registry.async_get(old[1].entity_id) is None
+    assert registry.async_get(old[2].entity_id) is None
+    assert len(hass.states.async_entity_ids("button")) == 1
+    assert not transmitter.commands

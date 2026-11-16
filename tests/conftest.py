@@ -66,3 +66,15 @@ def config_entry(
     )
     entry.add_to_hass(hass)
     return entry
+
+
+@pytest.fixture
+def receiver(hass: HomeAssistant):
+    """An independently managed HackRF receiver integration."""
+    from homeassistant.config_entries import ConfigEntryState
+
+    entry = MockConfigEntry(domain="hackrf_proxy", title="RF receiver")
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    yield entry
+    entry.mock_state(hass, ConfigEntryState.NOT_LOADED)
