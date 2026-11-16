@@ -1,11 +1,13 @@
 """Exercise setup through Home Assistant's config flow manager."""
 
 import pytest
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.harf_dooya.protocol import make_command
 
 from .conftest import RecordingTransmitter
 
@@ -120,3 +122,73 @@ async def test_saved_frequency_ignored(
             blocking=True,
         )
     assert [command.frequency for command in transmitter.commands] == [433_890_000] * 3
+
+
+async def test_reconfigure_channels(hass, transmitter, config_entry):
+    """Resize an existing remote while keeping retained entities and the device."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    retained_id = registry.async_get_entity_id("cover", "harf_dooya", "123c14_1")
+    registry.async_update_entity(retained_id, new_entity_id="cover.custom_blind")
+    retained = registry.async_get("cover.custom_blind")
+    original_data = dict(config_entry.data)
+    original_unique_id = config_entry.unique_id
+    for count in (15, 1, 3):
+        previous_count = config_entry.data["channels"]
+        result = await hass.config_entries.flow.async_init(
+            "harf_dooya",
+            context={"source": SOURCE_RECONFIGURE, "entry_id": config_entry.entry_id},
+        )
+        assert result["data_schema"]({
+            "transmitter": transmitter.entity_id, "receiver": "none"
+        })["channels"] == previous_count
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"transmitter": transmitter.entity_id, "receiver": "none", "channels": count},
+        )
+        assert result["reason"] == "reconfigure_successful"
+        await hass.async_block_till_done()
+        assert config_entry.data == {**original_data, "channels": count}
+        assert config_entry.unique_id == original_unique_id
+        covers = [
+            e for e in er.async_entries_for_config_entry(registry, config_entry.entry_id)
+            if e.domain == "cover"
+        ]
+        assert {e.unique_id for e in covers} == {
+            f"123c14_{channel}" for channel in range(count + 1)
+        }
+        assert set(hass.states.async_entity_ids("cover")) == {e.entity_id for e in covers}
+        assert registry.async_get("cover.custom_blind").id == retained.id
+        assert all(e.device_id == retained.device_id for e in covers)
+        assert len(hass.states.async_entity_ids("button")) == 1
+        added_id = registry.async_get_entity_id("cover", "harf_dooya", f"123c14_{count}")
+        await hass.services.async_call(
+            "cover", "open_cover", {"entity_id": added_id}, blocking=True
+        )
+        assert transmitter.commands[-1].get_raw_timings() == make_command(
+            config_entry.data["remote_id"], count, 1
+        ).get_raw_timings()
+
+
+@pytest.mark.parametrize("channels", [0, 16, 1.5])
+async def test_reconfigure_invalid_channels(hass, transmitter, config_entry, channels):
+    """Reject channel counts outside the supported whole-number range."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    original_data = dict(config_entry.data)
+    result = await hass.config_entries.flow.async_init(
+        "harf_dooya",
+        context={"source": SOURCE_RECONFIGURE, "entry_id": config_entry.entry_id},
+    )
+    user_input = {
+        "transmitter": transmitter.entity_id, "receiver": "none", "channels": channels
+    }
+    if channels == 1.5:
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+        assert result["errors"] == {"channels": "invalid_channels"}
+    else:
+        with pytest.raises(InvalidData):
+            await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+    assert config_entry.data == original_data
+    hass.config_entries.flow.async_abort(result["flow_id"])

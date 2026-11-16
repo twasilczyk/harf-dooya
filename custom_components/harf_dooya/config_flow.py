@@ -282,7 +282,7 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Replace radios without changing the remote or entity identities."""
+        """Update remote settings while preserving retained entity identities."""
         entry = self._get_reconfigure_entry()
         try:
             transmitters = async_get_transmitters(
@@ -326,6 +326,14 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
                     for other in self.hass.config_entries.async_entries(DOMAIN)
                 ):
                     errors[CONF_REMOTE_ID] = "already_configured"
+            channels = user_input.get(CONF_CHANNELS, entry.data[CONF_CHANNELS])
+            if (
+                isinstance(channels, bool)
+                or not isinstance(channels, (int, float))
+                or not 1 <= channels <= MAX_CHANNELS
+                or int(channels) != channels
+            ):
+                errors[CONF_CHANNELS] = "invalid_channels"
             selected = user_input[CONF_RECEIVER]
             if (
                 selected != NO_RECEIVER
@@ -337,6 +345,7 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
                 data = dict(entry.data)
                 data[CONF_TRANSMITTER] = transmitter.id
                 data[CONF_REMOTE_ID] = remote_id
+                data[CONF_CHANNELS] = int(channels)
                 data.pop(CONF_RECEIVER, None)
                 if selected != NO_RECEIVER:
                     data[CONF_RECEIVER] = selected
@@ -376,6 +385,16 @@ class DooyaConfigFlow(ConfigFlow, domain=DOMAIN):
                             "suggested_value": f"0x{entry.data[CONF_REMOTE_ID]:07X}"
                         },
                     ): selector.TextSelector(),
+                    vol.Required(
+                        CONF_CHANNELS, default=entry.data[CONF_CHANNELS]
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1,
+                            max=MAX_CHANNELS,
+                            step=1,
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
                     vol.Required(
                         CONF_RECEIVER, default=configured
                     ): selector.SelectSelector(

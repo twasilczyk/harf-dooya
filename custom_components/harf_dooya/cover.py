@@ -17,7 +17,10 @@ from .const import (
     BUTTON_OPEN,
     BUTTON_STOP,
     CONF_CHANNELS,
+    CONF_ENTITY_KEY,
+    CONF_REMOTE_ID,
     CONF_TRANSMITTER,
+    DOMAIN,
 )
 from .entity import DooyaEntity
 from .protocol import make_command
@@ -31,8 +34,21 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Add the broadcast cover and one cover for each numbered remote channel."""
+    registry = er.async_get(hass)
+    identity = entry.data.get(CONF_ENTITY_KEY, f"{entry.data[CONF_REMOTE_ID]:07x}")
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.domain != "cover" or entity.platform != DOMAIN:
+            continue
+        prefix, separator, channel = entity.unique_id.rpartition("_")
+        if (
+            separator
+            and prefix == identity
+            and channel.isdecimal()
+            and int(channel) > entry.data[CONF_CHANNELS]
+        ):
+            registry.async_remove(entity.entity_id)
     transmitter_entity_id = er.async_validate_entity_id(
-        er.async_get(hass), entry.data[CONF_TRANSMITTER]
+        registry, entry.data[CONF_TRANSMITTER]
     )
 
     async_add_entities(

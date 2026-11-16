@@ -43,12 +43,13 @@
         }
       },
       "reconfigure": {
-        "title": "Change remote ID or RF radios",
-        "description": "Correct the 28-bit remote ID, including its high nibble, or change radios. Existing entity IDs are preserved.",
+        "title": "Change remote settings",
+        "description": "Change the 28-bit remote ID, radios, or number of channels (1–15). Retained channels keep their entity IDs. Channel 0 is All blinds.",
         "data": {
           "transmitter": "RF transmitter",
           "receiver": "RF receiver",
-          "remote_id": "28-bit remote ID"
+          "remote_id": "28-bit remote ID",
+          "channels": "Number of channels"
         }
       }
     },
@@ -63,7 +64,7 @@
       "already_configured": "This remote is already configured.",
       "no_transmitters": "Add an RF transmitter to Home Assistant before setting up Dooya RF.",
       "no_compatible_transmitters": "No RF transmitter supports 433.890 MHz with OOK modulation.",
-      "reconfigure_successful": "Remote ID and radio settings updated."
+      "reconfigure_successful": "Remote settings updated."
     },
     "progress": {
       "listening": "Press Stop on the physical remote. Listening for repeated Dooya frames for up to 30 seconds. Nothing is transmitted while learning."

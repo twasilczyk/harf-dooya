@@ -96,8 +96,10 @@ RF receive channels and subscribes directly to the ESPHome API, including when H
 only exposes transmitters. It ignores IR/unknown/transmit-only channels and
 rediscovers RF channels on reconnect. HackRF uses its RX dispatcher contract.
 
-Use the integration entry's **Reconfigure** action to change transmitter and optional
-receiver without changing the channel count or HA entity identities. You can also
+Use the integration entry's **Reconfigure** action to change the transmitter, optional
+receiver, or number of channels (1–15). Increasing the count adds covers; decreasing
+it removes covers above the new count. Retained channels keep their entity IDs,
+and All blinds remains available. You can also
 correct the complete 28-bit remote ID (including the upper
 nibble of the former channel byte) without recreating the existing entities. An offline/missing configured receiver can be retained or replaced.
 Existing entries without a receiver remain transmit-only. v1 entries automatically
