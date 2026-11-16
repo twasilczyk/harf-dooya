@@ -18,7 +18,7 @@ def make_remote(hass=None, remote_id=0x123C140):
     return DooyaRemote(hass, entry)
 
 
-def test_routing_and_echo_without_motor_state():
+def test_routing_and_echo_with_assumed_position():
     remote = make_remote()
     events = []
     remote.async_add_event_listener(events.append)
@@ -95,7 +95,7 @@ def test_unload_cancels_pending_senders():
 
         await remote._tx_lock.acquire()
         task = asyncio.create_task(
-            remote.async_transmit(1, 5, make_command(1, 1, 5), send)
+            remote.async_transmit(1, 3, make_command(1, 1, 3), send)
         )
         await asyncio.sleep(0)
         remote.async_stop()
@@ -103,6 +103,29 @@ def test_unload_cancels_pending_senders():
         result = await asyncio.gather(task, return_exceptions=True)
         assert isinstance(result[0], asyncio.CancelledError)
         assert not calls
+        assert remote.assumed_positions == {0: 50, 1: 50, 2: 50, 3: 50}
         assert not remote._tx_tasks
+
+    asyncio.run(run())
+
+
+def test_positions_notified_only_after_successful_send():
+    async def run():
+        remote = make_remote()
+        snapshots = []
+        remote.async_add_listener(lambda: snapshots.append(dict(remote.assumed_positions)))
+
+        async def send(command):
+            assert remote.assumed_positions[1] == 50
+            assert not snapshots
+
+        await remote.async_transmit(1, 1, make_command(1, 1, 1), send)
+        assert snapshots == [{0: 50, 1: 100, 2: 50, 3: 50}]
+        remote._availability(False)
+        assert remote.assumed_positions[1] == 100
+        # An echo must not overwrite a newer assumption from another command.
+        remote._observe(1, 3, "remote")
+        remote.async_receive(remote_frame(command=1) * 3)
+        assert remote.assumed_positions[1] == 0
 
     asyncio.run(run())

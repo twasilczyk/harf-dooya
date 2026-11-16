@@ -85,8 +85,22 @@ A numbered press updates only that channel's `last_command`,
 `last_command_origin`, and `last_command_timestamp`. Channel 0 updates these
 attributes on **All blinds** and every numbered cover and generates one broadcast
 event. Numbered-channel presses leave the broadcast cover's diagnostics unchanged. These
-observations are **button presses, not verified motor state**: position and
-open/closed state remain unknown. Receiving a command never transmits another.
+observations are **button presses, not verified motor state**. Receiving a command
+never transmits another.
+
+Covers report optimistic positions: Open assumes 100% (`open`), Close assumes 0%
+(`closed`), and Stop assumes 50% (`open`). Stop sends only the Stop command; it does
+not move the blind to 50%. Successfully sent HA commands and received physical
+remote presses update these estimates. P2 and unknown commands leave them unchanged.
+All covers start at 50%, including after restart or integration reload; positions
+are not persisted. There is no physical position feedback, travel-time tracking,
+calibration, or arbitrary percentage control. Missed remote presses leave estimates
+stale, and receiver disconnection does not reset them.
+
+Channel 0 (All blinds) updates every channel with one broadcast command. Its
+position tracks the last assumed broadcast action, not an aggregate measurement
+of the individual blinds. Subsequent numbered-channel commands update only that
+channel.
 
 The receiver is independent of the transmitter. A missing/offline receiver makes
 Remote action unavailable while covers and P2 remain usable with their transmitter.

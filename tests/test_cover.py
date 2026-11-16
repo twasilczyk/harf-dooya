@@ -1,10 +1,13 @@
 """Verify cover controls and the RF consumer lifecycle in Home Assistant."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from homeassistant.components.cover import DATA_COMPONENT, CoverEntityFeature
 from homeassistant.components.radio_frequency.helpers import async_send_command
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_CLOSED, STATE_OPEN, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from rf_protocols.commands.ook import OOKCommand
@@ -76,10 +79,12 @@ async def test_channels_and_commands(
         assert cover._rf_transmitter_entity_id == transmitter.entity_id
         state = hass.states.get(entity_id)
         assert state is not None
-        assert state.state == STATE_UNKNOWN
+        assert state.state == STATE_OPEN
         assert state.attributes["assumed_state"] is True
         assert state.attributes["device_class"] == "blind"
-        assert "current_position" not in state.attributes
+        assert state.attributes["current_position"] == 50
+        assert cover.is_closed is False
+        assert state.attributes["is_closed"] is False
         assert state.attributes["supported_features"] == (
             CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         )
@@ -92,6 +97,12 @@ async def test_channels_and_commands(
             await hass.services.async_call(
                 "cover", service, {"entity_id": entity_id}, blocking=True
             )
+            position = {1: 100, 3: 0, 5: 50}[button]
+            state = hass.states.get(entity_id)
+            assert state.attributes["current_position"] == position
+            assert state.state == (STATE_CLOSED if position == 0 else STATE_OPEN)
+            assert state.attributes["is_closed"] is (position == 0)
+            assert cover.is_closed is (position == 0)
             command = transmitter.commands[-1]
             timings = command.get_raw_timings()
             assert len(timings) == 82
@@ -103,8 +114,8 @@ async def test_channels_and_commands(
             assert command.repeat_count == 2
             assert timings[-1] == -8144
 
-        # Sending a command cannot tell us the blind's actual position.
-        assert hass.states.get(entity_id).state == STATE_UNKNOWN
+        # Stop reports an estimate, not measured motor position.
+        assert hass.states.get(entity_id).state == STATE_OPEN
 
     assert len(transmitter.commands) == 12
 
@@ -121,7 +132,7 @@ async def test_transmitter_availability_rename_and_unload(
     assert len(covers) == 4
     assert hass.states.get(transmitter.entity_id).state == STATE_UNKNOWN
     assert all(
-        hass.states.get(entity_id).state == STATE_UNKNOWN for entity_id in covers
+        hass.states.get(entity_id).state == STATE_OPEN for entity_id in covers
     )
 
     transmitter._attr_available = False
@@ -141,7 +152,7 @@ async def test_transmitter_availability_rename_and_unload(
     transmitter.async_write_ha_state()
     await hass.async_block_till_done()
     assert all(
-        hass.states.get(entity_id).state == STATE_UNKNOWN for entity_id in covers
+        hass.states.get(entity_id).state == STATE_OPEN for entity_id in covers
     )
 
     await hass.services.async_call(
@@ -185,3 +196,28 @@ async def test_transmitter_availability_rename_and_unload(
     assert all(
         hass.states.get(entity_id).state == STATE_UNAVAILABLE for entity_id in covers
     )
+
+
+async def test_failed_transmission_preserves_position(hass, transmitter, config_entry):
+    """A failed send leaves the prior UI estimate and diagnostics untouched."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "cover", "harf_dooya", "123c14_1"
+    )
+    await hass.services.async_call(
+        "cover", "open_cover", {"entity_id": entity_id}, blocking=True
+    )
+    previous = hass.states.get(entity_id)
+    with patch.object(
+        transmitter, "async_send_command",
+        AsyncMock(side_effect=HomeAssistantError("send failed")),
+    ):
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "cover", "close_cover", {"entity_id": entity_id}, blocking=True
+            )
+    state = hass.states.get(entity_id)
+    assert state.state == STATE_OPEN
+    assert state.attributes == previous.attributes
+    assert config_entry.runtime_data.assumed_positions[1] == 100

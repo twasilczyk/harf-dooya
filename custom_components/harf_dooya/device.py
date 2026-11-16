@@ -15,18 +15,38 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from rf_protocols import RadioFrequencyCommand
 
-from .const import CONF_CHANNELS, CONF_RECEIVER, CONF_REMOTE_ID, CONF_TRANSMITTER
+from .const import (
+    BUTTON_CLOSE,
+    BUTTON_OPEN,
+    BUTTON_PROGRAM,
+    BUTTON_STOP,
+    CONF_CHANNELS,
+    CONF_RECEIVER,
+    CONF_REMOTE_ID,
+    CONF_TRANSMITTER,
+)
 from .protocol import Frame, FrameStream
 from .receiver import async_get_source
 
 _LOGGER = logging.getLogger(__name__)
 ECHO_TAIL = 0.35
-COMMAND_NAMES = {1: "open", 3: "close", 5: "stop", 0xC: "p2"}
+DEFAULT_ASSUMED_POSITION = 50
+COMMAND_POSITIONS = {
+    BUTTON_OPEN: 100,
+    BUTTON_CLOSE: 0,
+    BUTTON_STOP: DEFAULT_ASSUMED_POSITION,
+}
+COMMAND_NAMES = {
+    BUTTON_OPEN: "open",
+    BUTTON_CLOSE: "close",
+    BUTTON_STOP: "stop",
+    BUTTON_PROGRAM: "p2",
+}
 _LOCKS_KEY = "harf_dooya_transmitter_locks"
 
 
 class DooyaRemote:
-    """Observe button presses without inferring motor state or retransmitting RX."""
+    """Track button presses and optimistic positions without retransmitting RX."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
@@ -35,6 +55,9 @@ class DooyaRemote:
         self.channels = entry.data[CONF_CHANNELS]
         self.receiver_available = False
         self.observations: dict[int, dict] = {}
+        self.assumed_positions: dict[int, int] = {
+            channel: DEFAULT_ASSUMED_POSITION for channel in range(self.channels + 1)
+        }
         self._decoder = FrameStream()
         self._listeners: list[Callable[[], None]] = []
         self._event_listeners: list[Callable[[Frame], None]] = []
@@ -108,8 +131,11 @@ class DooyaRemote:
             "last_command_timestamp": dt_util.utcnow().isoformat(),
         }
         channels = range(self.channels + 1) if channel == 0 else (channel,)
+        position = COMMAND_POSITIONS.get(command)
         for target in channels:
             self.observations[target] = observation
+            if position is not None:
+                self.assumed_positions[target] = position
         self._notify()
 
     @callback

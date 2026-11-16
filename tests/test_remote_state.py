@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_RECONFIGURE, ConfigEntryState
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_CLOSED, STATE_OPEN, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import DATA_DISPATCHER
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -36,7 +36,7 @@ async def setup_remote(hass, config_entry, receiver):
 @pytest.mark.parametrize(
     "command,name", [(1, "open"), (3, "close"), (5, "stop"), (12, "p2")]
 )
-async def test_channel_event_unknown_position(
+async def test_channel_event_assumed_position(
     hass, transmitter, config_entry, receiver, command, name
 ):
     covers, event = await setup_remote(hass, config_entry, receiver)
@@ -52,8 +52,11 @@ async def test_channel_event_unknown_position(
     assert hass.states.get(covers[1]).attributes["last_command"] == name
     assert hass.states.get(covers[1]).attributes["last_command_origin"] == "remote"
     assert "last_command" not in hass.states.get(covers[0]).attributes
-    assert all(hass.states.get(c).state == STATE_UNKNOWN for c in covers)
-    assert all("current_position" not in hass.states.get(c).attributes for c in covers)
+    for index, cover in enumerate(covers):
+        position = {1: 100, 3: 0, 5: 50, 12: 50}[command] if index == 1 else 50
+        cover_state = hass.states.get(cover)
+        assert cover_state.attributes["current_position"] == position
+        assert cover_state.state == (STATE_CLOSED if position == 0 else STATE_OPEN)
     await emit(hass, receiver, remote_frame(channel=2, command=command) * 2)
     assert hass.states.get(event).state == state.state
     assert not transmitter.commands
@@ -98,7 +101,7 @@ async def test_broadcast_transmission_and_echo(hass, transmitter, config_entry, 
         assert len(transmitter.commands) == 1
         for entity_id in [all_blinds, *covers]:
             state = hass.states.get(entity_id)
-            assert state.state == STATE_UNKNOWN
+            assert state.state == STATE_OPEN
             assert state.attributes["last_command"] == "stop"
             assert state.attributes["last_command_origin"] == "home_assistant"
         await emit(hass, receiver, remote_frame(channel=0) * 3)
@@ -133,7 +136,7 @@ async def test_disconnect_and_unload(hass, transmitter, config_entry, receiver):
     receiver.mock_state(hass, ConfigEntryState.NOT_LOADED)
     await hass.async_block_till_done()
     assert hass.states.get(event).state == STATE_UNAVAILABLE
-    assert hass.states.get(covers[0]).state == STATE_UNKNOWN
+    assert hass.states.get(covers[0]).state == STATE_OPEN
     receiver.mock_state(hass, ConfigEntryState.LOADED)
     await hass.async_block_till_done()
     await emit(hass, receiver, remote_frame())
@@ -187,7 +190,7 @@ async def test_missing_receiver_and_reconfigure_preserve_ids(
         }
         assert config_entry.unique_id == "123c140"
         assert config_entry.options == {"frequency": 433_921_000}
-    assert hass.states.get(covers[0]).state == STATE_UNKNOWN
+    assert hass.states.get(covers[0]).state == STATE_OPEN
     assert hass.states.get(event).state == STATE_UNAVAILABLE
     assert not transmitter.commands
 
@@ -218,3 +221,113 @@ async def test_platforms_and_remotes_share_transmitter_lock(
     assert [c.repeat_count for c in transmitter.commands] == [2, 3]
     assert not config_entry.runtime_data._tx_tasks
     assert not other.runtime_data._tx_tasks
+
+
+@pytest.mark.parametrize("origin", ["home_assistant", "remote"])
+async def test_positions_broadcast_and_individual(
+    hass, transmitter, config_entry, receiver, origin
+):
+    """Both command paths share broadcast semantics without aggregating positions."""
+    covers, event = await setup_remote(hass, config_entry, receiver)
+    registry = er.async_get(hass)
+    all_blinds = registry.async_get_entity_id("cover", "harf_dooya", "123c14_0")
+    entities = [all_blinds, *covers]
+    expected = [50] * 4
+    # Include P2 after a non-default position.
+    actions = [(0, 1), (2, 5), (0, 3), (1, 1), (1, 12), (0, 5)]
+    for step, (channel, command) in enumerate(actions):
+        with patch(
+            "custom_components.harf_dooya.device.monotonic", return_value=10 + step
+        ):
+            if origin == "remote":
+                await emit(
+                    hass, receiver, remote_frame(channel=channel, command=command) * 3
+                )
+            elif command == 12:
+                button = registry.async_get_entity_id("button", "harf_dooya", "123c14_p2")
+                await hass.services.async_call(
+                    "button", "press", {"entity_id": button}, blocking=True
+                )
+            else:
+                service = {1: "open_cover", 3: "close_cover", 5: "stop_cover"}[command]
+                await hass.services.async_call(
+                    "cover", service, {"entity_id": entities[channel]}, blocking=True
+                )
+        if command != 12:
+            position = {1: 100, 3: 0, 5: 50}[command]
+            if channel == 0:
+                expected = [position] * 4
+            else:
+                expected[channel] = position
+        for entity_id, position in zip(entities, expected, strict=True):
+            state = hass.states.get(entity_id)
+            assert state.attributes["current_position"] == position
+            assert state.state == (STATE_CLOSED if position == 0 else STATE_OPEN)
+        assert len(transmitter.commands) == (step + 1 if origin == "home_assistant" else 0)
+        if origin == "home_assistant":
+            assert hass.states.get(event).state == STATE_UNKNOWN
+
+
+async def test_nonmovement_and_foreign_frames_preserve_positions(
+    hass, transmitter, config_entry, receiver
+):
+    covers, event = await setup_remote(hass, config_entry, receiver)
+    await emit(hass, receiver, remote_frame(command=1) * 3)
+    expected = dict(config_entry.runtime_data.assumed_positions)
+    previous_event = hass.states.get(event).state
+    for frame in (
+        remote_frame(channel=0, command=7),
+        remote_frame(remote_id=123, command=3),
+        remote_frame(channel=4, command=3),
+    ):
+        await emit(hass, receiver, frame * 3)
+        assert config_entry.runtime_data.assumed_positions == expected
+        assert hass.states.get(covers[0]).attributes["current_position"] == 100
+        assert hass.states.get(event).state == previous_event
+    await emit(hass, receiver, remote_frame(channel=0, command=12) * 3)
+    assert config_entry.runtime_data.assumed_positions == expected
+    assert hass.states.get(covers[0]).attributes["current_position"] == 100
+    assert hass.states.get(event).attributes["event_type"] == "p2"
+    assert not transmitter.commands
+
+
+async def test_position_survives_radio_loss_and_resets_on_reload(
+    hass, transmitter, config_entry, receiver
+):
+    covers, event = await setup_remote(hass, config_entry, receiver)
+    await emit(hass, receiver, remote_frame(command=3) * 3)
+    assert hass.states.get(covers[0]).attributes["current_position"] == 0
+    remote = config_entry.runtime_data
+    receiver.mock_state(hass, ConfigEntryState.NOT_LOADED)
+    await hass.async_block_till_done()
+    assert hass.states.get(event).state == STATE_UNAVAILABLE
+    assert hass.states.get(covers[0]).state == STATE_CLOSED
+    assert hass.states.get(covers[0]).attributes["current_position"] == 0
+    transmitter._attr_available = False
+    transmitter.async_write_ha_state()
+    await hass.async_block_till_done()
+    assert hass.states.get(covers[0]).state == STATE_UNAVAILABLE
+    assert remote.assumed_positions[1] == 0
+    transmitter._attr_available = True
+    transmitter.async_write_ha_state()
+    await hass.async_block_till_done()
+    assert hass.states.get(covers[0]).state == STATE_CLOSED
+    assert hass.states.get(covers[0]).attributes["current_position"] == 0
+    data, options = dict(config_entry.data), dict(config_entry.options)
+    registry = er.async_get(hass)
+    identities = {
+        e.entity_id: (e.unique_id, e.device_id)
+        for e in er.async_entries_for_config_entry(registry, config_entry.entry_id)
+    }
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.runtime_data is not remote
+    assert config_entry.data == data and config_entry.options == options
+    assert identities == {
+        e.entity_id: (e.unique_id, e.device_id)
+        for e in er.async_entries_for_config_entry(registry, config_entry.entry_id)
+    }
+    for entity_id in hass.states.async_entity_ids("cover"):
+        state = hass.states.get(entity_id)
+        assert state.state == STATE_OPEN
+        assert state.attributes["current_position"] == 50

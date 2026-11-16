@@ -62,7 +62,6 @@ class DooyaCover(DooyaEntity, CoverEntity):
 
     _attr_device_class = CoverDeviceClass.BLIND
     _attr_assumed_state = True
-    _attr_is_closed = None
     _attr_supported_features = (
         CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
     )
@@ -78,6 +77,16 @@ class DooyaCover(DooyaEntity, CoverEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(self._remote.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def current_cover_position(self) -> int:
+        """Return the assumed position, not measured motor feedback."""
+        return self._remote.assumed_positions[self._channel]
+
+    @property
+    def is_closed(self) -> bool:
+        """Only the assumed fully closed position is closed."""
+        return self.current_cover_position == 0
 
     @property
     def extra_state_attributes(self) -> dict:
