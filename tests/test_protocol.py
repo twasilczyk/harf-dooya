@@ -21,7 +21,7 @@ def test_oem_frame_and_repeats(button: int) -> None:
     assert all(sum(map(abs, expected[i : i + 2])) == 1076 for i in range(2, 82, 2))
 
     command = make_command(0x123C140, 1, button)
-    assert command.frequency == 433_934_000
+    assert command.frequency == 433_890_000
     assert command.modulation == "OOK"
     assert command.repeat_count == 2
     expected[-1] = -8144
@@ -44,10 +44,10 @@ def test_oem_frame_and_repeats(button: int) -> None:
     assert sequence[:82] == sequence[82:164] == sequence[164:]
 
 
-def test_frequency_override_and_final_zero() -> None:
-    """Frequency overrides preserve data; a final zero preserves its frame interval."""
-    command = make_command(0xABCDEFF, 15, 2, 433_921_000)
-    assert command.frequency == 433_921_000
+def test_final_zero() -> None:
+    """A final zero preserves its frame interval."""
+    command = make_command(0xABCDEFF, 15, 2)
+    assert command.frequency == 433_890_000
     timings = command.get_raw_timings()
     assert timings[-2:] == [328, -8146]
     bits = "".join("1" if mark == 680 else "0" for mark in timings[2::2])
@@ -78,8 +78,8 @@ def test_falling_edge_changes_preserve_all_rising_edges(button: int) -> None:
 
 def test_programming_frames() -> None:
     """P2 keeps the existing symbols and sends 0xCC four times at 57.3 ms."""
-    command = make_programming_command(0x123C140, 1, 433_921_000)
-    assert command.frequency == 433_921_000
+    command = make_programming_command(0x123C140, 1)
+    assert command.frequency == 433_890_000
     assert command.modulation == "OOK"
     assert command.repeat_count == 3
     timings = command.get_raw_timings()

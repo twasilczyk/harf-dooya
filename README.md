@@ -16,7 +16,7 @@ Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
 
 - Home Assistant **2026.9.2 or newer**. This is the minimum tested version.
 - An RF transmitter already added to Home Assistant, exposing a
-  `radio_frequency` entity supporting **433.934 MHz OOK**. A `remote` entity alone
+  `radio_frequency` entity supporting **433.890 MHz OOK**. A `remote` entity alone
   does not provide this API.
 - A remote already paired with your blinds, and its channel count.
 - Optionally, an ESPHome RF receiver or a `hackrf_proxy` integration to learn its
@@ -67,7 +67,7 @@ the remote, using the same frequency, timings, and three-frame sequence.
 
 The device's **Configuration** section also provides one **P2 (Programming)**
 button for the whole remote, using channel 1. Both physical P2 keys use the same
-command, so only one P2 entity is exposed. It uses that remote's configured RF frequency
+command, so only one P2 entity is exposed. It uses the fixed 433.890 MHz RF frequency
 and sends `0xCC` four times, with 57.3 ms between frame starts.
 
 Learning identifies an already paired remote; it does not pair the blinds.
@@ -97,10 +97,9 @@ only exposes transmitters. It ignores IR/unknown/transmit-only channels and
 rediscovers RF channels on reconnect. HackRF uses its RX dispatcher contract.
 
 Use the integration entry's **Reconfigure** action to change transmitter and optional
-receiver without changing the channel count, HA entity identities or frequency
-option. You can also correct the complete 28-bit remote ID (including the upper
+receiver without changing the channel count or HA entity identities. You can also
+correct the complete 28-bit remote ID (including the upper
 nibble of the former channel byte) without recreating the existing entities. An offline/missing configured receiver can be retained or replaced.
-**Configure** continues to set the per-remote transmit frequency independently.
 Existing entries without a receiver remain transmit-only. v1 entries automatically
 migrate from a 24-bit ID to a 28-bit ID by shifting left four bits. Their
 original HA entity/device identities are preserved. For nonzero prefixes use
@@ -133,10 +132,10 @@ sync rising edge. Programmed timings fitted to the OEM envelope are sync 4,672/1
 zero 328/748 µs, and one 680/396 µs (HIGH/LOW). The bit period is 1,076 µs.
 Open, Close, and Stop have a 56.968 ms frame start interval.
 
-The carrier defaults to **433.934 MHz**, including for existing entries. Use the
-integration’s **Configure** action to set a different carrier frequency in Hz for
-each remote. The selected transmitter must support that frequency. Saving reloads
-the covers; it does not alter the radio’s crystal calibration or other protocols.
+The carrier is fixed at **433890000 Hz (433.890 MHz)** for all remotes, including
+existing entries with saved frequency overrides. The selected transmitter must
+support this frequency. The integration does not alter the radio’s crystal
+calibration or other protocols.
 
 See [RF transmission details](docs/rf-transmission.md) for the transmission path,
 CC1101 register calculation, and repeat timing.

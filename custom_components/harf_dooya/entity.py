@@ -10,11 +10,9 @@ from rf_protocols.commands.ook import OOKCommand
 
 from .const import (
     CONF_ENTITY_KEY,
-    CONF_FREQUENCY,
     CONF_REMOTE_ID,
     CONF_TRANSMITTER,
     DOMAIN,
-    FREQUENCY,
 )
 
 
@@ -44,9 +42,6 @@ class DooyaEntity(RadioFrequencyTransmitterConsumerEntity, DooyaDeviceEntity):
     ) -> None:
         DooyaDeviceEntity.__init__(self, entry)
         self._channel = channel
-        self._frequency = entry.options.get(
-            CONF_FREQUENCY, entry.data.get(CONF_FREQUENCY, FREQUENCY)
-        )
         self._rf_transmitter_entity_id = transmitter_entity_id
         # Home Assistant 2026.9 uses the UUID-based consumer helper.
         self._rf_transmitter_entity_id_or_uuid = entry.data[CONF_TRANSMITTER]

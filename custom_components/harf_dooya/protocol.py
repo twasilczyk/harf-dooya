@@ -45,27 +45,23 @@ def encode_timings(remote_id: int, channel: int, button: int) -> list[int]:
     return timings
 
 
-def make_command(
-    remote_id: int, channel: int, button: int, frequency: int = FREQUENCY
-) -> OOKCommand:
+def make_command(remote_id: int, channel: int, button: int) -> OOKCommand:
     """Send three OEM frames with the gap measured from the final falling edge."""
     timings = encode_timings(remote_id, channel, button)
     # The final bit's space is part of the gap, not an additional delay.
     timings[-1] = -(INTER_FRAME_GAP_US if button & 1 else INTER_FRAME_GAP_ZERO_US)
     return OOKCommand(
-        frequency=frequency, timings=timings, repeat_count=FRAME_COUNT - 1
+        frequency=FREQUENCY, timings=timings, repeat_count=FRAME_COUNT - 1
     )
 
 
-def make_programming_command(
-    remote_id: int, channel: int, frequency: int = FREQUENCY
-) -> OOKCommand:
+def make_programming_command(remote_id: int, channel: int) -> OOKCommand:
     """Send P2 (0xCC) four times, with 57.3 ms between frame starts."""
     timings = encode_timings(remote_id, channel, BUTTON_PROGRAM)
     # Replace the final LOW so it completes the requested start-to-start period.
     timings[-1] = -(PROGRAM_FRAME_INTERVAL_US - sum(abs(t) for t in timings[:-1]))
     return OOKCommand(
-        frequency=frequency, timings=timings, repeat_count=PROGRAM_FRAME_COUNT - 1
+        frequency=FREQUENCY, timings=timings, repeat_count=PROGRAM_FRAME_COUNT - 1
     )
 
 

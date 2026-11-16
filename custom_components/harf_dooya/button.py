@@ -60,5 +60,5 @@ class DooyaProgrammingButton(DooyaEntity, ButtonEntity):
         """Transmit four P2 frames."""
         await self._async_transmit(
             BUTTON_PROGRAM,
-            make_programming_command(self._remote_id, self._channel, self._frequency),
+            make_programming_command(self._remote_id, self._channel),
         )

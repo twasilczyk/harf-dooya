@@ -72,19 +72,19 @@ class DooyaCover(DooyaEntity, CoverEntity):
         """Open the blind."""
         await self._async_transmit(
             BUTTON_OPEN,
-            make_command(self._remote_id, self._channel, BUTTON_OPEN, self._frequency),
+            make_command(self._remote_id, self._channel, BUTTON_OPEN),
         )
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the blind."""
         await self._async_transmit(
             BUTTON_CLOSE,
-            make_command(self._remote_id, self._channel, BUTTON_CLOSE, self._frequency),
+            make_command(self._remote_id, self._channel, BUTTON_CLOSE),
         )
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the blind."""
         await self._async_transmit(
             BUTTON_STOP,
-            make_command(self._remote_id, self._channel, BUTTON_STOP, self._frequency),
+            make_command(self._remote_id, self._channel, BUTTON_STOP),
         )

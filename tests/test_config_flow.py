@@ -98,22 +98,20 @@ async def test_no_compatible_transmitters(
     assert result["reason"] == "no_compatible_transmitters"
 
 
-async def test_frequency_options_reload(
+@pytest.mark.parametrize("storage", ["data", "options"])
+async def test_saved_frequency_ignored(
     hass: HomeAssistant,
     transmitter: RecordingTransmitter,
     config_entry: MockConfigEntry,
+    storage: str,
 ) -> None:
-    """A frequency change reloads existing covers and reaches every command."""
+    """Saved frequency overrides cannot change the fixed carrier."""
+    hass.config_entries.async_update_entry(
+        config_entry,
+        **{storage: {**getattr(config_entry, storage), "frequency": 433_921_000}},
+    )
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    result = await hass.config_entries.options.async_init(config_entry.entry_id)
-    assert result["type"] == FlowResultType.FORM
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"frequency": 433_921_000}
-    )
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert config_entry.options["frequency"] == 433_921_000
     for service in ("open_cover", "close_cover", "stop_cover"):
         await hass.services.async_call(
             "cover",
@@ -121,36 +119,4 @@ async def test_frequency_options_reload(
             {"entity_id": hass.states.async_entity_ids("cover")[0]},
             blocking=True,
         )
-    assert [command.frequency for command in transmitter.commands] == [433_921_000] * 3
-
-
-@pytest.mark.parametrize(
-    ("frequency", "error"),
-    [(433_934_000.5, "invalid_frequency"), (315_000_000, "unsupported_frequency")],
-)
-async def test_invalid_frequency_options(
-    hass: HomeAssistant,
-    config_entry: MockConfigEntry,
-    frequency: float,
-    error: str,
-) -> None:
-    """Reject malformed frequencies and frequencies outside the radio's range."""
-    result = await hass.config_entries.options.async_init(config_entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"frequency": frequency}
-    )
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"frequency": error}
-    assert not config_entry.options
-
-
-async def test_frequency_schema_bounds(
-    hass: HomeAssistant, config_entry: MockConfigEntry
-) -> None:
-    """The form rejects zero before it reaches the options handler."""
-    result = await hass.config_entries.options.async_init(config_entry.entry_id)
-    with pytest.raises(InvalidData):
-        await hass.config_entries.options.async_configure(
-            result["flow_id"], {"frequency": 0}
-        )
-    assert not config_entry.options
+    assert [command.frequency for command in transmitter.commands] == [433_890_000] * 3

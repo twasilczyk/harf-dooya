@@ -99,7 +99,7 @@ async def test_channels_and_commands(
             bits = "".join("1" if mark == 680 else "0" for mark in timings[2::2])
             payload = int(bits, 2).to_bytes(5, "big")
             assert payload == bytes((0x12, 0x3C, 0x14, channel, button * 0x11))
-            assert command.frequency == 433_934_000
+            assert command.frequency == 433_890_000
             assert command.repeat_count == 2
             assert timings[-1] == -8144
 

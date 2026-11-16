@@ -12,7 +12,7 @@ Carrier and pulse timings are unchanged.
 
 P2 programming uses nibble `0xC` twice, giving `12 3C 14 01 CC` for the same
 remote and channel. The remote has one configuration button on the existing
-device, using channel 1 and sharing the covers' transmitter and frequency settings. Both physical
+device, using channel 1 and sharing the covers' transmitter and fixed frequency. Both physical
 P2 keys map to this single command.
 
 `make_programming_command` uses the same sync and bit timings but requests four
@@ -42,7 +42,7 @@ to preserve its previous 56618 µs frame interval as well. The cover commands
 
 ## Transmission path inspected
 
-1. `DooyaCover` passes the per-remote frequency to `make_command`, which returns
+1. `DooyaCover` calls `make_command`, which uses 433890000 Hz and returns
    one 82-duration raw OOK frame and `repeat_count=2` (additional repeats).
 2. HA's RF consumer calls `async_send_command`. The ESPHome RF entity forwards
    the raw durations and frequency through `radio_frequency_transmit_raw_timings`,
@@ -115,9 +115,9 @@ RF capture after deployment; tests cannot establish the resulting analog widths.
 
 ## Frequency and calibration
 
-The default requested frequency is **433934000 Hz**. Existing entries without a
-frequency override use this default. Each remote's Configure form can override it;
-the options flow checks the selected transmitter's supported range and OOK support.
+The requested frequency is fixed at **433890000 Hz (433.890 MHz)** for covers and
+P2 buttons. Saved frequency overrides are ignored. Setup and reconfiguration
+check the transmitter's supported range and OOK support.
 
 The inspected OpenHARF `rf.yaml` configures the 433 MHz module with
 `xtal_correction_ppm: -20.38`. The CC1101 driver calculates:
@@ -127,21 +127,10 @@ f_xtal = 26_000_000 * (1 + correction_ppm / 1_000_000)
 FREQ = trunc(requested_hz * 65536 / f_xtal)
 ```
 
-With the driver's float precision, `f_xtal = 25,999,470 Hz` and the new register
-word is **0x10B0AB** (`FREQ2=0x10`, `FREQ1=0xB0`, `FREQ0=0xAB`). Its calibrated
-frequency is approximately **433,933,994.8 Hz**. Interpreted with an uncorrected
-26 MHz crystal, that same word represents **433,942,840.6 Hz**. That higher nominal
-register frequency compensates the existing crystal error; do not apply a second
-frequency offset in HA. Different hardware calibration values produce different
-register words for the same requested RF frequency.
-
-The previous request maps to 0x10B087 with this calibration. The register change
-is 36 steps, approximately 14.282 kHz; each step is approximately 396.72 Hz.
-The measured old output and nominal register calculation need not coincide exactly.
-A fresh RF capture is required to confirm the actual carrier and edge timings;
-software tests verify requested durations, not CC1101 analog edge delays or the
-USRP frequency reference. The per-remote frequency permits subsequent adjustment
-without altering crystal calibration.
+Different hardware calibration values produce different register words for the
+same requested RF frequency. A fresh RF capture is required to confirm the actual
+carrier and edge timings; software tests verify requested durations and frequency,
+not CC1101 analog edge delays or the USRP frequency reference.
 
 ## Reception and press confirmation
 

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Select an RF transmitter",
-        "description": "Choose the radio used to send Dooya commands at 433.934 MHz.",
+        "description": "Choose the radio used to send Dooya commands at 433.890 MHz.",
         "data": {
           "transmitter": "RF transmitter"
         }
@@ -44,7 +44,7 @@
       },
       "reconfigure": {
         "title": "Change remote ID or RF radios",
-        "description": "Correct the 28-bit remote ID, including its high nibble, or change radios. Existing entity IDs and frequency settings are preserved.",
+        "description": "Correct the 28-bit remote ID, including its high nibble, or change radios. Existing entity IDs are preserved.",
         "data": {
           "transmitter": "RF transmitter",
           "receiver": "RF receiver",
@@ -55,36 +55,18 @@
     "error": {
       "invalid_remote_id": "Enter a 28-bit remote ID between 0 and 268435455, decimal or hexadecimal with a 0x prefix (e.g. 0x4231157).",
       "invalid_channels": "Enter a whole number of channels between 1 and 15.",
-      "invalid_transmitter": "Select a compatible 433.934 MHz OOK transmitter.",
+      "invalid_transmitter": "Select a compatible 433.890 MHz OOK transmitter.",
       "receiver_unusable": "Select an available receiver or continue without a receiver.",
       "already_configured": "Another Dooya entry already uses this 28-bit remote ID."
     },
     "abort": {
       "already_configured": "This remote is already configured.",
       "no_transmitters": "Add an RF transmitter to Home Assistant before setting up Dooya RF.",
-      "no_compatible_transmitters": "No RF transmitter supports 433.934 MHz with OOK modulation.",
+      "no_compatible_transmitters": "No RF transmitter supports 433.890 MHz with OOK modulation.",
       "reconfigure_successful": "Remote ID and radio settings updated."
     },
     "progress": {
       "listening": "Press Stop on the physical remote. Listening for repeated Dooya frames for up to 30 seconds. Nothing is transmitted while learning."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Dooya carrier frequency",
-        "description": "Requested RF frequency for this remote. OpenHARF applies the radio’s existing crystal calibration.",
-        "data": {
-          "frequency": "Carrier frequency"
-        },
-        "data_description": {
-          "frequency": "Frequency in Hz; default 433934000 (433.934 MHz)."
-        }
-      }
-    },
-    "error": {
-      "invalid_frequency": "Enter a whole-number frequency in Hz between 1 and 4294967295.",
-      "unsupported_frequency": "The selected transmitter does not support this frequency with OOK modulation, or is no longer available."
     }
   }
 }

@@ -11,15 +11,15 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from .conftest import RecordingTransmitter
 
 
-@pytest.mark.parametrize("frequency", [433_934_000, 433_921_000])
+@pytest.mark.parametrize("frequency", [None, 433_921_000])
 async def test_programming_button(
     hass: HomeAssistant,
     transmitter: RecordingTransmitter,
     config_entry: MockConfigEntry,
-    frequency: int,
+    frequency: int | None,
 ) -> None:
     """One configuration button per remote shares the covers' device and radio."""
-    if frequency != 433_934_000:
+    if frequency is not None:
         hass.config_entries.async_update_entry(
             config_entry, options={"frequency": frequency}
         )
@@ -38,7 +38,7 @@ async def test_programming_button(
         "button", "press", {"entity_id": entity_id}, blocking=True
     )
     command = transmitter.commands[-1]
-    assert command.frequency == frequency
+    assert command.frequency == 433_890_000
     assert command.repeat_count == 3
     timings = command.get_raw_timings()
     bits = "".join("1" if mark == 680 else "0" for mark in timings[2::2])
@@ -62,7 +62,7 @@ async def test_programming_button(
         "button", "press", {"entity_id": buttons[0]}, blocking=True
     )
     assert len(transmitter.commands) == 2
-    assert transmitter.commands[-1].frequency == frequency
+    assert transmitter.commands[-1].frequency == 433_890_000
     assert await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
     assert all(

@@ -5,9 +5,8 @@ CONF_TRANSMITTER = "transmitter"
 CONF_REMOTE_ID = "remote_id"
 CONF_ENTITY_KEY = "entity_key"  # Stable HA device/entity identity.
 CONF_CHANNELS = "channels"
-CONF_FREQUENCY = "frequency"
 
-FREQUENCY = 433_934_000
+FREQUENCY = 433_890_000
 MAX_REMOTE_ID = 0xFFFFFFF
 MAX_CHANNELS = 15
 
