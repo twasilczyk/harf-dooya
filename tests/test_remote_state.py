@@ -51,7 +51,8 @@ async def test_channel_event_assumed_position(
     )
     await emit(hass, receiver, remote_frame(channel=2, command=command) * 3)
     state = hass.states.get(event)
-    assert state.attributes["event_type"] == name
+    assert state.attributes["command"] == name
+    assert state.attributes["event_type"] == f"blind_2_{name}"
     assert state.attributes["channel"] == 2
     assert state.attributes["remote_id"] == 0x123C140
     assert state.attributes["broadcast"] is False
@@ -83,6 +84,7 @@ async def test_broadcast_filters_unknown_and_second_press(
         await emit(hass, receiver, remote_frame(channel=0) * 3)
     first = hass.states.get(event).state
     assert hass.states.get(event).attributes["broadcast"] is True
+    assert hass.states.get(event).attributes["event_type"] == "all_blinds_stop"
     assert all(hass.states.get(c).attributes["last_command"] == "stop" for c in covers)
     with patch("custom_components.harf_dooya.device.monotonic", return_value=10.31):
         await emit(hass, receiver, remote_frame(channel=0) * 2)
@@ -91,7 +93,7 @@ async def test_broadcast_filters_unknown_and_second_press(
         await emit(hass, receiver, remote_frame(channel=1, command=7) * 2)
     assert hass.states.get(covers[0]).attributes["last_command"] == "unknown_0x7"
     assert hass.states.get(all_blinds).attributes["last_command"] == "stop"
-    assert hass.states.get(event).attributes["event_type"] == "stop"
+    assert hass.states.get(event).attributes["command"] == "stop"
     assert not transmitter.commands
 
 
@@ -113,7 +115,7 @@ async def test_broadcast_transmission_and_echo(hass, transmitter, config_entry, 
         await emit(hass, receiver, remote_frame(channel=0) * 3)
         assert hass.states.get(event).state == STATE_UNKNOWN
         await emit(hass, receiver, remote_frame(channel=2, command=1) * 3)
-    assert hass.states.get(event).attributes["event_type"] == "open"
+    assert hass.states.get(event).attributes["command"] == "open"
     assert hass.states.get(covers[1]).attributes["last_command"] == "open"
     assert hass.states.get(all_blinds).attributes["last_command"] == "stop"
     assert len(transmitter.commands) == 1
@@ -128,12 +130,12 @@ async def test_echo_and_different_command(hass, transmitter, config_entry, recei
         await emit(hass, receiver, remote_frame(command=1) * 3)
         assert hass.states.get(event).state == STATE_UNKNOWN
         await emit(hass, receiver, remote_frame(command=5) * 3)
-    assert hass.states.get(event).attributes["event_type"] == "stop"
+    assert hass.states.get(event).attributes["command"] == "stop"
     assert len(transmitter.commands) == 1
     # Matching physical presses outside the echo window can be observed again.
     with patch("custom_components.harf_dooya.device.monotonic", return_value=11):
         await emit(hass, receiver, remote_frame(command=1) * 3)
-    assert hass.states.get(event).attributes["event_type"] == "open"
+    assert hass.states.get(event).attributes["command"] == "open"
 
 
 async def test_disconnect_and_unload(hass, transmitter, config_entry, receiver):
@@ -148,7 +150,7 @@ async def test_disconnect_and_unload(hass, transmitter, config_entry, receiver):
     await emit(hass, receiver, remote_frame())
     assert hass.states.get(event).state == STATE_UNKNOWN
     await emit(hass, receiver, remote_frame())
-    assert hass.states.get(event).attributes["event_type"] == "stop"
+    assert hass.states.get(event).attributes["command"] == "stop"
     transmitter._attr_available = False
     transmitter.async_write_ha_state()
     await hass.async_block_till_done()
@@ -248,7 +250,7 @@ async def test_nonmovement_and_foreign_frames_preserve_positions(
     await emit(hass, receiver, remote_frame(channel=0, command=12) * 3)
     assert config_entry.runtime_data.assumed_positions == expected
     assert hass.states.get(covers[0]).state == STATE_OPENING
-    assert hass.states.get(event).attributes["event_type"] == "p2"
+    assert hass.states.get(event).attributes["command"] == "p2"
     assert not transmitter.commands
 
 

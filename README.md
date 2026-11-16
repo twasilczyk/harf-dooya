@@ -75,10 +75,17 @@ Learning identifies an already paired remote; it does not pair the blinds.
 
 ## Physical remote reception
 
-Each remote has one **Remote action** event entity with `open`, `close`, `stop`,
-and `p2` event types. Its attributes include the remote ID, channel, and whether
-the press was broadcast. Two consecutive identical complete frames confirm a
-press; repeats are deduplicated until 300 ms of silence. Unknown valid command
+Each remote has one **Remote action** event entity. Its event label identifies
+both the received channel and action, such as **Blind 2: Open** or
+**All blinds: Stop**. Event types are `blind_2_open`, `all_blinds_stop`, etc. Its attributes keep
+the plain `command` (`open`, `close`, `stop`, or `p2`), remote ID, numeric `channel`,
+and `broadcast` flag (channel 0 means All blinds).
+
+Automations previously matching `event_type: open` (or close/stop/p2) should now
+match the `command` attribute, or use a channel-specific event type. The Remote
+action entity ID stays unchanged.
+
+Two consecutive identical complete frames confirm a press; repeats are deduplicated until 300 ms of silence. Unknown valid command
 nibbles remain available as cover diagnostics, but do not generate known events.
 
 A numbered press updates only that channel's `last_command`,

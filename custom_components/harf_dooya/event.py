@@ -1,12 +1,11 @@
 """One physical remote press event entity, independent of TX availability."""
 
-from typing import ClassVar
-
 from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import CONF_CHANNELS
 from .device import COMMAND_NAMES
 from .entity import DooyaDeviceEntity
 from .protocol import Frame
@@ -20,12 +19,23 @@ async def async_setup_entry(
     async_add_entities([DooyaRemoteEvent(entry)])
 
 
+def _event_type(channel: int, command: str) -> str:
+    """Include the received target in HA's displayed event type."""
+    target = "all_blinds" if channel == 0 else f"blind_{channel}"
+    return f"{target}_{command}"
+
+
 class DooyaRemoteEvent(DooyaDeviceEntity, EventEntity):
     _attr_name = "Remote action"
-    _attr_event_types: ClassVar[list[str]] = list(COMMAND_NAMES.values())
+    _attr_translation_key = "remote_action"
 
     def __init__(self, entry: ConfigEntry) -> None:
         super().__init__(entry)
+        self._attr_event_types = [
+            _event_type(channel, command)
+            for channel in range(entry.data[CONF_CHANNELS] + 1)
+            for command in COMMAND_NAMES.values()
+        ]
         self._attr_unique_id = f"{self._identity}_remote_action"
 
     @property
@@ -40,8 +50,9 @@ class DooyaRemoteEvent(DooyaDeviceEntity, EventEntity):
     @callback
     def _receive(self, frame: Frame) -> None:
         self._trigger_event(
-            COMMAND_NAMES[frame.command],
+            _event_type(frame.channel, COMMAND_NAMES[frame.command]),
             {
+                "command": COMMAND_NAMES[frame.command],
                 "remote_id": frame.remote_id,
                 "channel": frame.channel,
                 "broadcast": frame.channel == 0,

@@ -69,5 +69,82 @@
     "progress": {
       "listening": "Press Stop on the physical remote. Listening for repeated Dooya frames for up to 30 seconds. Nothing is transmitted while learning."
     }
+  },
+  "entity": {
+    "event": {
+      "remote_action": {
+        "name": "Remote action",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "all_blinds_open": "All blinds: Open",
+              "all_blinds_close": "All blinds: Close",
+              "all_blinds_stop": "All blinds: Stop",
+              "all_blinds_p2": "All blinds: P2",
+              "blind_1_open": "Blind 1: Open",
+              "blind_1_close": "Blind 1: Close",
+              "blind_1_stop": "Blind 1: Stop",
+              "blind_1_p2": "Blind 1: P2",
+              "blind_2_open": "Blind 2: Open",
+              "blind_2_close": "Blind 2: Close",
+              "blind_2_stop": "Blind 2: Stop",
+              "blind_2_p2": "Blind 2: P2",
+              "blind_3_open": "Blind 3: Open",
+              "blind_3_close": "Blind 3: Close",
+              "blind_3_stop": "Blind 3: Stop",
+              "blind_3_p2": "Blind 3: P2",
+              "blind_4_open": "Blind 4: Open",
+              "blind_4_close": "Blind 4: Close",
+              "blind_4_stop": "Blind 4: Stop",
+              "blind_4_p2": "Blind 4: P2",
+              "blind_5_open": "Blind 5: Open",
+              "blind_5_close": "Blind 5: Close",
+              "blind_5_stop": "Blind 5: Stop",
+              "blind_5_p2": "Blind 5: P2",
+              "blind_6_open": "Blind 6: Open",
+              "blind_6_close": "Blind 6: Close",
+              "blind_6_stop": "Blind 6: Stop",
+              "blind_6_p2": "Blind 6: P2",
+              "blind_7_open": "Blind 7: Open",
+              "blind_7_close": "Blind 7: Close",
+              "blind_7_stop": "Blind 7: Stop",
+              "blind_7_p2": "Blind 7: P2",
+              "blind_8_open": "Blind 8: Open",
+              "blind_8_close": "Blind 8: Close",
+              "blind_8_stop": "Blind 8: Stop",
+              "blind_8_p2": "Blind 8: P2",
+              "blind_9_open": "Blind 9: Open",
+              "blind_9_close": "Blind 9: Close",
+              "blind_9_stop": "Blind 9: Stop",
+              "blind_9_p2": "Blind 9: P2",
+              "blind_10_open": "Blind 10: Open",
+              "blind_10_close": "Blind 10: Close",
+              "blind_10_stop": "Blind 10: Stop",
+              "blind_10_p2": "Blind 10: P2",
+              "blind_11_open": "Blind 11: Open",
+              "blind_11_close": "Blind 11: Close",
+              "blind_11_stop": "Blind 11: Stop",
+              "blind_11_p2": "Blind 11: P2",
+              "blind_12_open": "Blind 12: Open",
+              "blind_12_close": "Blind 12: Close",
+              "blind_12_stop": "Blind 12: Stop",
+              "blind_12_p2": "Blind 12: P2",
+              "blind_13_open": "Blind 13: Open",
+              "blind_13_close": "Blind 13: Close",
+              "blind_13_stop": "Blind 13: Stop",
+              "blind_13_p2": "Blind 13: P2",
+              "blind_14_open": "Blind 14: Open",
+              "blind_14_close": "Blind 14: Close",
+              "blind_14_stop": "Blind 14: Stop",
+              "blind_14_p2": "Blind 14: P2",
+              "blind_15_open": "Blind 15: Open",
+              "blind_15_close": "Blind 15: Close",
+              "blind_15_stop": "Blind 15: Stop",
+              "blind_15_p2": "Blind 15: P2"
+            }
+          }
+        }
+      }
+    }
   }
 }
