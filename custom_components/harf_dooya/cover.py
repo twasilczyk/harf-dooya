@@ -30,14 +30,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add one cover for each numbered remote channel."""
+    """Add the broadcast cover and one cover for each numbered remote channel."""
     transmitter_entity_id = er.async_validate_entity_id(
         er.async_get(hass), entry.data[CONF_TRANSMITTER]
     )
 
     async_add_entities(
         DooyaCover(entry, channel, transmitter_entity_id)
-        for channel in range(1, entry.data[CONF_CHANNELS] + 1)
+        for channel in range(entry.data[CONF_CHANNELS] + 1)
     )
 
 
@@ -57,7 +57,7 @@ class DooyaCover(DooyaEntity, CoverEntity):
         """Name the cover for its remote channel."""
         super().__init__(entry, channel, transmitter_entity_id)
         self._attr_unique_id = f"{self._remote_id:06x}_{channel}"
-        self._attr_name = f"Blind {channel}"
+        self._attr_name = "All blinds" if channel == 0 else f"Blind {channel}"
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

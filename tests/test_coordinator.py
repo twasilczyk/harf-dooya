@@ -25,7 +25,7 @@ def test_routing_and_echo_without_motor_state():
     with patch("custom_components.harf_dooya.device.monotonic", return_value=10):
         remote.async_receive(remote_frame(channel=0) * 3)
     assert len(events) == 1 and events[0].channel == 0
-    assert set(remote.observations) == {1, 2, 3}
+    assert set(remote.observations) == {0, 1, 2, 3}
     assert all(o["last_command"] == "stop" for o in remote.observations.values())
     with patch("custom_components.harf_dooya.device.monotonic", return_value=11):
         remote._echo_until[(1, 1)] = 12

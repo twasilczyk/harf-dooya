@@ -46,7 +46,7 @@ async def test_channels_and_commands(
     transmitter: RecordingTransmitter,
     config_entry: MockConfigEntry,
 ) -> None:
-    """Each numbered cover sends the same commands as the ESPHome covers."""
+    """Broadcast and numbered covers send their own channel in one RF burst."""
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -56,16 +56,22 @@ async def test_channels_and_commands(
         for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id)
         if entity.domain == "cover"
     ]
-    assert len(covers) == 3
+    assert len(covers) == 4
     assert len({cover.device_id for cover in covers}) == 1
-    assert {cover.unique_id for cover in covers} == {"123c14_1", "123c14_2", "123c14_3"}
+    assert {cover.unique_id for cover in covers} == {
+        "123c14_0",
+        "123c14_1",
+        "123c14_2",
+        "123c14_3",
+    }
 
-    for channel in range(1, 4):
+    for channel in range(4):
         entity_id = registry.async_get_entity_id(
             "cover", "harf_dooya", f"123c14_{channel}"
         )
         assert entity_id is not None
         cover = hass.data[DATA_COMPONENT].get_entity(entity_id)
+        assert cover.name == ("All blinds" if channel == 0 else f"Blind {channel}")
         # Newer RF helpers require a resolved entity ID for availability tracking.
         assert cover._rf_transmitter_entity_id == transmitter.entity_id
         state = hass.states.get(entity_id)
@@ -100,7 +106,7 @@ async def test_channels_and_commands(
         # Sending a command cannot tell us the blind's actual position.
         assert hass.states.get(entity_id).state == STATE_UNKNOWN
 
-    assert len(transmitter.commands) == 9
+    assert len(transmitter.commands) == 12
 
 
 async def test_transmitter_availability_rename_and_unload(
@@ -112,7 +118,7 @@ async def test_transmitter_availability_rename_and_unload(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     covers = hass.states.async_entity_ids("cover")
-    assert len(covers) == 3
+    assert len(covers) == 4
     assert hass.states.get(transmitter.entity_id).state == STATE_UNKNOWN
     assert all(
         hass.states.get(entity_id).state == STATE_UNKNOWN for entity_id in covers

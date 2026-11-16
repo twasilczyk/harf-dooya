@@ -41,7 +41,7 @@ async def test_setup_and_duplicate_remote(hass, transmitter):
         "transmitter": er.async_get(hass).async_get(transmitter.entity_id).id,
     }
     await hass.async_block_till_done()
-    assert len(hass.states.async_all("cover")) == 3
+    assert len(hass.states.async_all("cover")) == 4
     assert len(hass.states.async_all("button")) == 1
     assert transmitter.commands == []
     duplicate = await manual_flow(hass, transmitter, str(0x123C14))

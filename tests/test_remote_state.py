@@ -63,6 +63,10 @@ async def test_broadcast_filters_unknown_and_second_press(
     hass, transmitter, config_entry, receiver
 ):
     covers, event = await setup_remote(hass, config_entry, receiver)
+    all_blinds = er.async_get(hass).async_get_entity_id(
+        "cover", "harf_dooya", "123c14_0"
+    )
+    covers.append(all_blinds)
     for timings in [remote_frame(remote_id=123) * 3, remote_frame(channel=4) * 3]:
         await emit(hass, receiver, timings)
     assert hass.states.get(event).state == STATE_UNKNOWN
@@ -77,8 +81,33 @@ async def test_broadcast_filters_unknown_and_second_press(
     with patch("custom_components.harf_dooya.device.monotonic", return_value=11):
         await emit(hass, receiver, remote_frame(channel=1, command=7) * 2)
     assert hass.states.get(covers[0]).attributes["last_command"] == "unknown_0x7"
+    assert hass.states.get(all_blinds).attributes["last_command"] == "stop"
     assert hass.states.get(event).attributes["event_type"] == "stop"
     assert not transmitter.commands
+
+
+async def test_broadcast_transmission_and_echo(hass, transmitter, config_entry, receiver):
+    covers, event = await setup_remote(hass, config_entry, receiver)
+    all_blinds = er.async_get(hass).async_get_entity_id(
+        "cover", "harf_dooya", "123c14_0"
+    )
+    with patch("custom_components.harf_dooya.device.monotonic", return_value=10):
+        await hass.services.async_call(
+            "cover", "stop_cover", {"entity_id": all_blinds}, blocking=True
+        )
+        assert len(transmitter.commands) == 1
+        for entity_id in [all_blinds, *covers]:
+            state = hass.states.get(entity_id)
+            assert state.state == STATE_UNKNOWN
+            assert state.attributes["last_command"] == "stop"
+            assert state.attributes["last_command_origin"] == "home_assistant"
+        await emit(hass, receiver, remote_frame(channel=0) * 3)
+        assert hass.states.get(event).state == STATE_UNKNOWN
+        await emit(hass, receiver, remote_frame(channel=2, command=1) * 3)
+    assert hass.states.get(event).attributes["event_type"] == "open"
+    assert hass.states.get(covers[1]).attributes["last_command"] == "open"
+    assert hass.states.get(all_blinds).attributes["last_command"] == "stop"
+    assert len(transmitter.commands) == 1
 
 
 async def test_echo_and_different_command(hass, transmitter, config_entry, receiver):

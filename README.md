@@ -6,8 +6,9 @@
 > USE AT YOUR OWN RISK
 
 A small Home Assistant custom integration for Dooya blinds, using any compatible
-`radio_frequency` transmitter. Creates one device per remote and one cover per
-numbered channel, with **open**, **close**, and **stop**.
+`radio_frequency` transmitter. Creates one device per remote, one cover per
+numbered channel, and an **All blinds** broadcast cover, with **open**, **close**,
+and **stop**.
 
 Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
 
@@ -58,10 +59,11 @@ Download the source archive from a
 5. Enter the number of numbered channels (1–255). Learning a channel does not
    determine the channel count. No RF command is sent during setup or learning.
 
-For three channels, setup creates **Blind 1**, **Blind 2**, and **Blind 3** under
+For three channels, setup creates **All blinds**, **Blind 1**, **Blind 2**, and **Blind 3** under
 the remote's device. Channels run from 1 to the configured count (maximum 255).
-Channel 0, the remote's broadcast channel, is not included in that count. You can
-use a Home Assistant cover group to control several of these covers together.
+**All blinds** uses channel 0, the remote's broadcast channel, which is not included
+in that count. Its controls send one broadcast command to all blinds paired with
+the remote, using the same frequency, timings, and three-frame sequence.
 
 The device's **Configuration** section also provides one **P2 (Programming)**
 button for the whole remote, using channel 1. Both physical P2 keys use the same
@@ -81,7 +83,8 @@ nibbles remain available as cover diagnostics, but do not generate known events.
 
 A numbered press updates only that channel's `last_command`,
 `last_command_origin`, and `last_command_timestamp`. Channel 0 updates these
-attributes on every numbered cover and generates one broadcast event. These
+attributes on **All blinds** and every numbered cover and generates one broadcast
+event. Numbered-channel presses leave the broadcast cover's diagnostics unchanged. These
 observations are **button presses, not verified motor state**: position and
 open/closed state remain unknown. Receiving a command never transmits another.
 

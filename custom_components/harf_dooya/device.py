@@ -107,7 +107,7 @@ class DooyaRemote:
             "last_command_origin": origin,
             "last_command_timestamp": dt_util.utcnow().isoformat(),
         }
-        channels = range(1, self.channels + 1) if channel == 0 else (channel,)
+        channels = range(self.channels + 1) if channel == 0 else (channel,)
         for target in channels:
             self.observations[target] = observation
         self._notify()
