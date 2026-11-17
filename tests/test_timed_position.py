@@ -41,7 +41,7 @@ def assert_cover(hass, entity_id, position, state):
     assert actual.attributes["assumed_state"] is True
     assert actual.attributes["supported_features"] == (
         CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
-        | (CoverEntityFeature.SET_POSITION if entity_id != cover_ids(hass)[0] else 0)
+        | CoverEntityFeature.SET_POSITION
     )
 
 
@@ -77,10 +77,6 @@ async def test_movement_stop_and_unknown_recovery(
     await command(3)
     assert_cover(hass, entities[1], None, "closing")
     advance(config_entry, motion_clock, 30)
-    assert_cover(hass, entities[1], 1, "closing")
-    advance(config_entry, motion_clock, 5)
-    assert_cover(hass, entities[1], 1, "closing")
-    advance(config_entry, motion_clock, 1)
     assert_cover(hass, entities[1], 0, "closed")
     await command(1)
     advance(config_entry, motion_clock, 12)
@@ -113,7 +109,7 @@ async def test_broadcast_uses_individual_times(
     else:
         await emit(hass, receiver, remote_frame(channel=0, command=1) * 3)
     advance(config_entry, motion_clock, 10)
-    assert_cover(hass, entities[1], 99, "opening")
+    assert_cover(hass, entities[1], 100, "open")
     for channel in (0, 2, 3):
         assert_cover(hass, entities[channel], None, "opening")
     advance(config_entry, motion_clock, 2)
@@ -126,7 +122,8 @@ async def test_broadcast_uses_individual_times(
     await emit(hass, receiver, remote_frame(channel=2, command=3) * 3)
     advance(config_entry, motion_clock, 10)
     assert_cover(hass, entities[2], 50, "closing")
-    for channel in (0, 1, 3):
+    assert_cover(hass, entities[0], 83, "closing")
+    for channel in (1, 3):
         assert_cover(hass, entities[channel], 100, "open")
     await emit(hass, receiver, remote_frame(channel=0, command=5) * 3)
     assert_cover(hass, entities[2], 50, "open")

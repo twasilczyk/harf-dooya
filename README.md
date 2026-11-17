@@ -8,7 +8,7 @@
 A small Home Assistant custom integration for Dooya blinds, using any compatible
 `radio_frequency` transmitter. Creates one device per remote, one cover per
 numbered channel, and an **All blinds** broadcast cover, with **open**, **close**,
-and **stop**.
+**stop**, and **set position**.
 
 Project: `harf-dooya`. Home Assistant domain: `harf_dooya`.
 
@@ -62,8 +62,9 @@ Download the source archive from a
 For three channels, setup creates **All blinds**, **Blind 1**, **Blind 2**, and **Blind 3** under
 the remote's device. Channels run from 1 to the configured count (maximum 15).
 **All blinds** uses channel 0, the remote's broadcast channel, which is not included
-in that count. Its controls send one broadcast command to all blinds paired with
-the remote, using the same frequency, timings, and three-frame sequence.
+in that count. Open, Close, and Stop send one broadcast command to all blinds paired
+with the remote, using the same frequency, timings, and three-frame sequence.
+Set position targets the numbered channels individually.
 
 The device's **Configuration** section also provides one **P2 (Programming)**
 button for the whole remote, using channel 1. Both physical P2 keys use the same
@@ -111,42 +112,41 @@ elapsed in one direction. Stopping earlier keeps it unknown; reversing starts a
 new full travel time. Repeating the same direction while moving does not restart
 the timer.
 
-At the estimated end of travel, the displayed position stays at 99% when opening
-or 1% when closing for an extra **20% of the configured full travel time**. This
-margin is a constant, including for partial journeys. Only afterward does the cover
-report 100% (`open`) or 0% (`closed`). For example, a blind with a 30-second travel
-time starting from unknown shows 99% after 30 seconds of opening and 100% after
-36 seconds. Ordinary Open/Close timers only update the UI; the motor stops at its
-own end limit.
+At the estimated end of travel, the cover reports 100% (`open`) or 0% (`closed`)
+without any extra travel time. Ordinary Open/Close timers only update the UI;
+no Stop command is sent, and the motor stops at its own end limit.
 
-Stop sends the existing Stop command and freezes the current estimated percentage,
-including 99%/1% during the extra-time period. P2 and unknown commands do not start
+Stop sends the existing Stop command and freezes the current estimated percentage.
+P2 and unknown commands do not start
 or stop a movement estimate. Missed remote presses can leave estimates stale.
 Radio disconnection does not reset the model or stop an already-running timer; cover availability still follows the
 transmitter, independently of the receiver.
 
-Channel 0 (All blinds) starts or stops every blind's estimate with one broadcast
-RF command. Each numbered blind uses its own configured time. All blinds has a
-separate estimate of the last broadcast action, using the longest configured
-travel time; it is not an aggregate measurement or confirmation that every blind
-has stopped. Subsequent numbered-channel commands update only that channel.
+All blinds uses one broadcast RF command for Open, Close, and Stop. Each numbered
+blind uses its own configured travel time. The All blinds percentage is the average
+of every numbered blind; it stays unknown if any blind's position is unknown.
+It reports movement while any member is moving (opening takes precedence if some
+are opening while others are closing).
 
-Numbered covers also support HA's position slider and `cover.set_cover_position`.
-When position is unknown, a target below 50% closes fully; a target of 50% or above
-opens fully. This establishes an endpoint using the normal full travel time and
-20% margin, without a timed Stop or a subsequent move to the original target.
+Every cover supports HA's position slider and `cover.set_cover_position`. Setting
+All blinds applies the target to each numbered blind in sequence, with independent
+timing and Stop commands based on each blind's starting position and travel time.
+When a blind's position is unknown, a target below 50% closes fully; a target of
+50% or above opens fully. This establishes an endpoint using the normal full travel
+time, without a timed Stop or a subsequent move to the original target.
 Once position is known, HA sends Open or Close, waits for the calculated travel
-time, then sends Stop for intermediate targets. For example, moving from 25% to 75% with
-a 20-second travel time takes approximately 10 seconds. Intermediate targets do
-not include the 20% endpoint margin. Targets of 0% and 100% use ordinary full
-Close/Open behavior, including the margin, and also work from unknown.
+time, then sends Stop for intermediate targets. For example, moving from 25% to 75%
+with a 20-second travel time takes approximately 10 seconds. Targets of 0% and 100%
+use ordinary full Close/Open behavior and never schedule a Stop.
 
-A new target replaces the previous one. Manual HA Open/Close/Stop requests and
-received physical movement commands cancel the pending timed Stop for affected
-channels; broadcast commands cancel all of them. P2, unknown commands, and echoes
-do not cancel targets. Reloading or restarting cancels pending targets and resets
-position to unknown; it does not send a physical Stop. All blinds has no percentage
-slider because its channels can have different starting positions and travel times.
+Targets can be changed during movement. A target ahead in the current direction
+only updates the pending Stop timer; one behind the current position reverses the
+blind, and one matching its displayed percentage stops it immediately. Manual HA
+Open/Close/Stop requests and received physical movement commands cancel pending
+targets for affected channels, including group members still waiting to start;
+broadcast commands cancel all of them. P2, unknown commands, and echoes do not
+cancel targets. Reloading or restarting cancels pending targets and resets position
+to unknown; it does not send a physical Stop.
 
 Position control remains approximate: RF latency, transmitter queueing, and missed
 commands can cause overshoot. The final estimate reflects elapsed time when Stop

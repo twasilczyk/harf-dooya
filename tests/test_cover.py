@@ -92,7 +92,7 @@ async def test_channels_and_commands(
         assert state.attributes["is_closed"] is None
         assert state.attributes["supported_features"] == (
             CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
-            | (CoverEntityFeature.SET_POSITION if channel != 0 else 0)
+            | CoverEntityFeature.SET_POSITION
         )
 
         for service, button in (

@@ -27,6 +27,7 @@ def _event_type(channel: int, command: str) -> str:
 
 class DooyaRemoteEvent(DooyaDeviceEntity, EventEntity):
     _attr_name = "Remote action"
+    _attr_icon = "mdi:remote"
     _attr_translation_key = "remote_action"
 
     def __init__(self, entry: ConfigEntry) -> None:

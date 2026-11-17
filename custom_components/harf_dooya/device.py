@@ -33,6 +33,7 @@ from .receiver import async_get_source
 
 _LOGGER = logging.getLogger(__name__)
 ECHO_TAIL = 0.35
+POST_BURST_IDLE = 0.2
 COMMAND_NAMES = {
     BUTTON_OPEN: "open",
     BUTTON_CLOSE: "close",
@@ -60,7 +61,7 @@ class DooyaRemote:
         self.channels = entry.data[CONF_CHANNELS]
         self.receiver_available = False
         self.observations: dict[int, dict] = {}
-        self.motions = {channel: Motion() for channel in range(self.channels + 1)}
+        self.motions = {channel: Motion() for channel in range(1, self.channels + 1)}
         self._position_timer: asyncio.TimerHandle | None = None
         self._position_targets: dict[int, PositionTarget] = {}
         self._decoder = FrameStream()
@@ -145,20 +146,33 @@ class DooyaRemote:
             motion.update(now)
         for target in channels:
             self.observations[target] = observation
-            self.motions[target].observe(command, now, self.travel_time(target))
+            if target != 0:
+                self.motions[target].observe(command, now, self.travel_time(target))
         self._schedule_position_update(now)
         self._notify()
 
     @property
     def assumed_positions(self) -> dict[int, int | None]:
         """Read the last published estimates without advancing time in getters."""
-        return {channel: motion.percentage for channel, motion in self.motions.items()}
+        return {channel: self.position(channel) for channel in range(self.channels + 1)}
+
+    def position(self, channel: int) -> int | None:
+        """Average every numbered blind for the All blinds cover."""
+        if channel != 0:
+            return self.motions[channel].percentage
+        positions = [motion.percentage for motion in self.motions.values()]
+        if any(position is None for position in positions):
+            return None
+        return round(sum(positions) / len(positions))
+
+    def is_moving(self, channel: int, direction: int) -> bool:
+        """A group is moving while any of its blinds moves in that direction."""
+        motions = self.motions.values() if channel == 0 else (self.motions[channel],)
+        return any(motion.direction == direction for motion in motions)
 
     def travel_time(self, channel: int) -> float:
-        """All blinds uses the slowest configured blind, not an aggregate position."""
+        """Return a numbered blind's configured full travel time."""
         times = self.entry.options.get(CONF_TRAVEL_TIMES, {})
-        if channel == 0:
-            return max(self.travel_time(i) for i in range(1, self.channels + 1))
         return times.get(str(channel), DEFAULT_TRAVEL_TIME)
 
     @callback
@@ -167,11 +181,9 @@ class DooyaRemote:
             self._position_timer.cancel()
             self._position_timer = None
         deadlines = [
-            deadline
+            motion.finish
             for motion in self.motions.values()
-            if motion.direction is not None
-            for deadline in (motion.travel_end, motion.finish)
-            if deadline > now
+            if motion.direction is not None and motion.finish > now
         ]
         if deadlines and not self._closed:
             delay = min(POSITION_UPDATE_INTERVAL, min(deadlines) - now)
@@ -253,7 +265,7 @@ class DooyaRemote:
             self._echo_until[key] = monotonic() + airtime + ECHO_TAIL
             # Native API calls can return before the radio has sent the burst.
             if not self._closed:
-                await asyncio.sleep(airtime)
+                await asyncio.sleep(airtime + POST_BURST_IDLE)
 
     @callback
     def _cancel_position_targets(self, channel: int) -> None:
@@ -269,19 +281,33 @@ class DooyaRemote:
         position: int,
         send: Callable[[RadioFrequencyCommand], Awaitable[None]],
     ) -> None:
-        """Start a numbered blind and arrange a Stop without blocking HA for travel."""
-        if not 1 <= channel <= self.channels or not 0 <= position <= 100:
-            raise ServiceValidationError(
-                "Set position requires a numbered blind and 0–100%"
-            )
-        if position in (0, 100):
-            command = BUTTON_OPEN if position == 100 else BUTTON_CLOSE
-            await self.async_transmit(
-                channel, command, make_command(self.remote_id, channel, command), send
-            )
-            return
+        """Start each affected blind sequentially; travel runs in the background."""
+        if not 0 <= channel <= self.channels or not 0 <= position <= 100:
+            raise ServiceValidationError("Set position requires a valid blind and 0–100%")
         self._cancel_position_targets(channel)
-        target = self._position_targets[channel] = PositionTarget(position)
+        channels = range(1, self.channels + 1) if channel == 0 else (channel,)
+        # Reserve every request before the first await. A later command (including
+        # physical RX) can then cancel even a group member still waiting to start.
+        targets = {i: PositionTarget(position) for i in channels}
+        self._position_targets.update(targets)
+        try:
+            for target_channel in channels:
+                target = targets.pop(target_channel)
+                await self._async_set_position(target_channel, target, send)
+        finally:
+            # On failure/cancellation, discard unstarted requests but preserve Stop
+            # timers for blinds that have already begun moving.
+            for target_channel, target in targets.items():
+                if self._position_targets.get(target_channel) is target:
+                    self._cancel_position_targets(target_channel)
+
+    async def _async_set_position(
+        self,
+        channel: int,
+        target: PositionTarget,
+        send: Callable[[RadioFrequencyCommand], Awaitable[None]],
+    ) -> None:
+        position = target.position
         task = asyncio.current_task()
         self._tx_tasks.add(task)
         try:
@@ -291,15 +317,16 @@ class DooyaRemote:
                 # Recalculate after waiting for the radio, not when the request arrived.
                 self._update_positions()
                 motion = self.motions[channel]
-                if motion.position is None:
+                if position in (0, 100) or motion.position is None:
                     # Without a starting position, establish the nearest endpoint
                     # to the requested target instead of timing an intermediate Stop.
                     self._cancel_position_targets(channel)
                     command = BUTTON_OPEN if position >= 50 else BUTTON_CLOSE
-                    await self._async_send_locked(
-                        channel, command,
-                        make_command(self.remote_id, channel, command), send,
-                    )
+                    if motion.direction != command:
+                        await self._async_send_locked(
+                            channel, command,
+                            make_command(self.remote_id, channel, command), send,
+                        )
                     return
                 if motion.percentage == position:
                     self._cancel_position_targets(channel)
@@ -311,6 +338,9 @@ class DooyaRemote:
                         )
                     return
                 command = BUTTON_OPEN if position > motion.position else BUTTON_CLOSE
+                if motion.direction == command:
+                    self._schedule_target_stop(channel, target, send)
+                    return
                 await self._async_send_locked(
                     channel, command, make_command(self.remote_id, channel, command),
                     send,

@@ -26,7 +26,8 @@ from .const import (
 from .entity import DooyaEntity
 from .protocol import make_command
 
-PARALLEL_UPDATES = 1
+# The coordinator serializes RF; new requests may cancel queued targets immediately.
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -65,6 +66,7 @@ class DooyaCover(DooyaEntity, CoverEntity):
     _attr_assumed_state = True
     _attr_supported_features = (
         CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
+        | CoverEntityFeature.SET_POSITION
     )
 
     def __init__(
@@ -72,8 +74,6 @@ class DooyaCover(DooyaEntity, CoverEntity):
     ) -> None:
         """Name the cover for its remote channel."""
         super().__init__(entry, channel, transmitter_entity_id)
-        if channel != 0:
-            self._attr_supported_features |= CoverEntityFeature.SET_POSITION
         self._attr_unique_id = f"{self._identity}_{channel}"
         self._attr_name = "All blinds" if channel == 0 else f"Blind {channel}"
 
@@ -84,21 +84,25 @@ class DooyaCover(DooyaEntity, CoverEntity):
     @property
     def current_cover_position(self) -> int | None:
         """Return the assumed position, not measured motor feedback."""
-        return self._remote.motions[self._channel].percentage
+        return self._remote.position(self._channel)
 
     @property
     def is_closed(self) -> bool | None:
         """Only the assumed fully closed position is closed."""
         position = self.current_cover_position
-        return None if position is None else position == 0
+        if position is None:
+            return None
+        if self._channel == 0:
+            return all(motion.percentage == 0 for motion in self._remote.motions.values())
+        return position == 0
 
     @property
     def is_opening(self) -> bool:
-        return self._remote.motions[self._channel].direction == BUTTON_OPEN
+        return self._remote.is_moving(self._channel, BUTTON_OPEN)
 
     @property
     def is_closing(self) -> bool:
-        return self._remote.motions[self._channel].direction == BUTTON_CLOSE
+        return self._remote.is_moving(self._channel, BUTTON_CLOSE)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -127,7 +131,7 @@ class DooyaCover(DooyaEntity, CoverEntity):
         )
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
-        """Time a numbered channel's movement and send Stop at its target."""
+        """Time each affected blind's movement and send Stop at its target."""
         await self._remote.async_set_position(
             self._channel, kwargs[ATTR_POSITION], self._send_command
         )

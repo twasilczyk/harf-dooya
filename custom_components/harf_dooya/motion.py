@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from .const import BUTTON_CLOSE, BUTTON_OPEN, BUTTON_STOP
 
-TRAVEL_OVERRUN = 0.20
 POSITION_UPDATE_INTERVAL = 1.0
 DEFAULT_TRAVEL_TIME = 30.0
 MIN_TRAVEL_TIME = 1.0
@@ -20,7 +19,6 @@ class Motion:
     started: float = 0.0
     start_position: float | None = None
     travel_time: float = DEFAULT_TRAVEL_TIME
-    travel_end: float = 0.0
     finish: float = 0.0
 
     @property
@@ -41,8 +39,6 @@ class Motion:
         if now >= self.finish:
             self.position = 100.0 if opening else 0.0
             self.direction = None
-        elif now >= self.travel_end:
-            self.position = 99.0 if opening else 1.0
         elif self.start_position is not None:
             distance = max(0.0, now - self.started) / self.travel_time * 100
             self.position = (
@@ -54,7 +50,7 @@ class Motion:
     def observe(self, command: int, now: float, travel_time: float) -> None:
         self.update(now)
         if command == BUTTON_STOP:
-            # Freeze the displayed estimate, including unknown and overrun values.
+            # Freeze the displayed estimate, including unknown values.
             self.position = self.percentage
             self.direction = None
         elif command in (BUTTON_OPEN, BUTTON_CLOSE) and command != self.direction:
@@ -65,8 +61,7 @@ class Motion:
             remaining = (
                 1.0 if self.position is None else abs(target - self.position) / 100
             )
-            self.travel_end = now + remaining * travel_time
-            self.finish = self.travel_end + TRAVEL_OVERRUN * travel_time
+            self.finish = now + remaining * travel_time
             self.direction = command
             self.update(now)
         # Repeated commands in the same direction do not restart uninterrupted travel.
